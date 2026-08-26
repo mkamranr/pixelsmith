@@ -12,7 +12,12 @@ export async function registerFiles(app: FastifyInstance, ctx: AppContext) {
     const job = await ctx.jobs.getJobForUser(id, req.currentUser!.id)
     if (!job) throw new NotFoundError('Job')
 
-    const file = (await ctx.jobs.listFiles(job.id)).find((f) => f.id === fileId && f.role === 'output')
+    // Inputs are served as well as outputs, so the results page can show a
+    // before/after comparison. Supporting assets are deliberately excluded:
+    // they are an implementation detail, not the user's file.
+    const file = (await ctx.jobs.listFiles(job.id)).find(
+      (f) => f.id === fileId && (f.role === 'output' || f.role === 'input'),
+    )
     if (!file) throw new NotFoundError('File')
 
     // readable() follows symlinks and re-checks containment before we open it.

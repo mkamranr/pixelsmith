@@ -2,6 +2,7 @@
 {% import "_macros.njk" as m %}
 {% import "_icons.njk" as ic %}
 {% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block mainClass %}wrap-wide{% endblock %}
 {% block content %}
 
 <nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
@@ -12,6 +13,9 @@
   <h1 class="page-title">{{ tool.title }}</h1>
   <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before processing images.</div>
 {% else %}
+
+<h1 class="page-title">{{ tool.title }}</h1>
+{% if tool.ui.blurb %}<p class="lede">{{ tool.ui.blurb }}</p>{% endif %}
 
 <form class="workspace" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data"
       data-canvas-form data-preview="{{ tool.ui.preview or 'none' }}">
@@ -46,7 +50,8 @@
       <label for="files" class="dropzone-label">
         <span class="dropzone-icon" aria-hidden="true">{{ ic.icon(tool.ui.icon, 38) }}</span>
         <strong>Choose images</strong>
-        <span class="muted">or drag them here — up to {{ maxFiles }} files, {{ maxUploadMb }} MB each</span>
+        <span class="muted">or drag and drop them here</span>
+        <span class="dropzone-meta">JPEG, PNG, WebP, AVIF, TIFF, HEIC · up to {{ maxFiles }} files · {{ maxUploadMb }} MB each</span>
       </label>
     </div>
 
@@ -65,8 +70,7 @@
 
   <aside class="panel">
     <div class="panel-head">
-      <h1><span class="panel-icon">{{ ic.icon(tool.ui.icon, 20) }}</span>{{ tool.title }}</h1>
-      {% if tool.ui.blurb %}<p class="muted">{{ tool.ui.blurb }}</p>{% endif %}
+      <h2 class="panel-title"><span class="panel-icon">{{ ic.icon(tool.ui.icon, 18) }}</span>Settings</h2>
     </div>
 
     {% block panelExtras %}{% endblock %}

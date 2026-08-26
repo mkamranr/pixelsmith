@@ -277,11 +277,22 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
 
     const files = await ctx.jobs.listFiles(job.id)
     const tool = ctx.registry.has(job.toolId) ? ctx.registry.get(job.toolId) : null
+    const inputs = files.filter((f) => f.role === 'input')
+    const outputs = files.filter((f) => f.role === 'output')
+
+    // Only offer a comparison where there is genuinely something to compare
+    // against: a generator tool has no original.
+    const comparisons =
+      outputs.length === inputs.length
+        ? outputs.map((out, index) => ({ before: inputs[index]!, after: out }))
+        : []
+
     return reply.view('job.njk', pageData(ctx, req, reply, {
       job,
       tool,
-      inputs: files.filter((f) => f.role === 'input'),
-      outputs: files.filter((f) => f.role === 'output'),
+      inputs,
+      outputs,
+      comparisons,
       isFinished: ['done', 'failed', 'expired', 'cancelled'].includes(job.status),
     }))
   })

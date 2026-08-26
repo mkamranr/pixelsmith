@@ -43,11 +43,48 @@
     <div class="job-done">
       <p><strong>{{ outputs | length }}</strong> file{% if outputs | length != 1 %}s{% endif %} ready.</p>
       {% if outputs | length > 1 %}
-        <a class="btn btn-primary" href="/jobs/{{ job.id }}/download">Download all as .zip</a>
+        <a class="btn btn-primary btn-lg" href="/jobs/{{ job.id }}/download">Download all as .zip</a>
+      {% elif outputs | length == 1 %}
+        {# A single result still deserves a primary action. #}
+        <a class="btn btn-primary btn-lg" href="/jobs/{{ job.id }}/files/{{ outputs[0].id }}" download>Download</a>
       {% endif %}
     </div>
   {% endif %}
 </div>
+
+{% if comparisons | length %}
+<h2 class="section-title">Before and after</h2>
+<p class="hint">Drag the divider to compare the original with the result.</p>
+<ul class="compare-list">
+  {% for pair in comparisons %}
+  <li class="compare" data-compare>
+    <div class="compare-frame" data-compare-frame>
+      {# The result is the base layer; the original is clipped over it. #}
+      <img class="compare-after" src="/jobs/{{ job.id }}/files/{{ pair.after.id }}" alt="Result">
+      <div class="compare-before" data-compare-before>
+        <img src="/jobs/{{ job.id }}/files/{{ pair.before.id }}" alt="Original">
+      </div>
+      <div class="compare-handle" data-compare-handle role="separator" aria-label="Comparison divider"
+           tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+        <span class="compare-grip" aria-hidden="true"></span>
+      </div>
+      <span class="compare-tag is-before">{{ m.bytes(pair.before.bytes) }}</span>
+      <span class="compare-tag is-after">{{ m.bytes(pair.after.bytes) }}</span>
+    </div>
+    <div class="compare-meta">
+      <span class="result-name" title="{{ pair.after.name }}">{{ pair.after.name }}</span>
+      {% set saved = pair.before.bytes - pair.after.bytes %}
+      {% if saved > 0 %}
+        <span class="pill pill-done">{{ (saved / pair.before.bytes * 100) | round }}% smaller</span>
+      {% elif saved < 0 %}
+        <span class="pill">{{ ((0 - saved) / pair.before.bytes * 100) | round }}% larger</span>
+      {% endif %}
+      <a class="btn btn-quiet btn-sm" href="/jobs/{{ job.id }}/files/{{ pair.after.id }}" download>Download</a>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
 
 {% if outputs | length %}
 <h2 class="section-title">Results</h2>
@@ -61,7 +98,7 @@
       <span class="result-name" title="{{ f.name }}">{{ f.name }}</span>
       <span class="muted">{{ m.bytes(f.bytes) }}</span>
     </div>
-    <a class="btn btn-quiet btn-sm" href="/jobs/{{ job.id }}/files/{{ f.id }}" download>Download</a>
+    <a class="btn btn-primary btn-block" href="/jobs/{{ job.id }}/files/{{ f.id }}" download>Download</a>
   </li>
   {% endfor %}
 </ul>
@@ -88,3 +125,5 @@
 </section>
 {% endif %}
 {% endblock %}
+
+{% block scripts %}<script src="/static/compare.js" defer></script>{% endblock %}

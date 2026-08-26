@@ -1,10 +1,10 @@
 {# Renders one declarative tool field. The tool declares these once and both
    this form and the API docs read from that same declaration. #}
 {% macro field(f) %}
-<div class="field" data-field="{{ f.name }}"
+<div class="field{% if f.kind == 'toggle' %} field-toggle{% endif %}" data-field="{{ f.name }}"
      {% if f.showWhen %}data-show-when-field="{{ f.showWhen.field }}"
      data-show-when-equals="{{ f.showWhen.equals | join(',') }}"{% endif %}>
-  <label for="f-{{ f.name }}">{{ f.label }}</label>
+  {% if f.kind != 'toggle' %}<label for="f-{{ f.name }}">{{ f.label }}</label>{% endif %}
 
   {% if f.kind == 'select' %}
     <select id="f-{{ f.name }}" name="{{ f.name }}">
@@ -18,7 +18,7 @@
        no script involved. #}
     <div class="segmented" role="radiogroup" aria-label="{{ f.label }}">
       {% for opt in f.options %}
-        <label class="segment{% if opt.value == f.default %} is-active{% endif %}">
+        <label class="segment">
           <input type="radio" name="{{ f.name }}" value="{{ opt.value }}"
                  {% if opt.value == f.default %}checked{% endif %}>
           <span>{{ opt.label }}</span>
@@ -27,11 +27,13 @@
     </div>
 
   {% elif f.kind == 'toggle' %}
-    <span class="toggle">
+    {# The whole row is the label, so the text is part of the hit target. #}
+    <label class="check-row" for="f-{{ f.name }}">
       <input type="checkbox" id="f-{{ f.name }}" name="{{ f.name }}" value="true"
              {% if f.default %}checked{% endif %}>
-      <span class="toggle-hint">{{ f.help or '' }}</span>
-    </span>
+      <span>{{ f.label }}</span>
+    </label>
+    {% if f.help %}<p class="hint hint-indent">{{ f.help }}</p>{% endif %}
 
   {% elif f.kind == 'textarea' %}
     <textarea id="f-{{ f.name }}" name="{{ f.name }}" rows="10" spellcheck="false"

@@ -2,6 +2,7 @@
 {% import "_icons.njk" as ic %}
 {% import "_macros.njk" as m %}
 {% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block mainClass %}wrap-wide{% endblock %}
 {% block content %}
 
 <nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
@@ -12,6 +13,9 @@
   <h1 class="page-title">{{ tool.title }}</h1>
   <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before editing images.</div>
 {% else %}
+
+<h1 class="page-title">{{ tool.title }}</h1>
+{% if tool.ui.blurb %}<p class="lede">{{ tool.ui.blurb }}</p>{% endif %}
 
 <form class="workspace" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data" data-editor>
   <input type="hidden" name="_csrf" value="{{ csrfToken }}">
@@ -49,8 +53,7 @@
 
   <aside class="panel editor-panel">
     <div class="panel-head">
-      <h1><span class="panel-icon">{{ ic.icon('sliders', 20) }}</span>{{ tool.title }}</h1>
-      <p class="muted">{{ tool.ui.blurb }}</p>
+      <h2 class="panel-title"><span class="panel-icon">{{ ic.icon('sliders', 18) }}</span>Adjustments</h2>
     </div>
 
     <div class="panel-group">

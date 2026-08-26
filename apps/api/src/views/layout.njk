@@ -40,7 +40,7 @@
   </div>
 </header>
 
-<main id="main" class="wrap">
+<main id="main" class="wrap {% block mainClass %}{% endblock %}">
   {% block content %}{% endblock %}
 </main>
 
@@ -52,5 +52,6 @@
 </footer>
 
 <script src="/static/app.js" defer></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

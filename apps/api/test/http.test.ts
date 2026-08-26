@@ -371,3 +371,85 @@ describe('supporting files', () => {
     expect(res.headers.location).toMatch(/^\/jobs\//)
   })
 })
+
+describe('comparing input against output', () => {
+  /** Run a job and return its id plus its recorded files. */
+  async function jobWithFiles(cookie: string) {
+    const res = await upload(cookie, 'resize', { mode: 'pixels', width: '80' })
+    const id = String(res.headers.location).replace('/jobs/', '')
+    await h.ctx.queue.close()
+    return { id, files: await h.ctx.jobs.listFiles(id) }
+  }
+
+  it('serves the original alongside the result, so the two can be compared', async () => {
+    const { cookie } = await signIn(h, 'compare@example.test')
+    const { id, files } = await jobWithFiles(cookie)
+
+    const original = files.find((f) => f.role === 'input')!
+    const res = await h.app.inject({
+      method: 'GET',
+      url: `/jobs/${id}/files/${original.id}`,
+      headers: { cookie },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toBe('image/png')
+  })
+
+  it("still refuses another user's original", async () => {
+    const owner = await signIn(h, 'owner4@example.test')
+    const { id, files } = await jobWithFiles(owner.cookie)
+    const original = files.find((f) => f.role === 'input')!
+
+    const intruder = await signIn(h, 'intruder4@example.test')
+    const res = await h.app.inject({
+      method: 'GET',
+      url: `/jobs/${id}/files/${original.id}`,
+      headers: { cookie: intruder.cookie },
+    })
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('does not expose a supporting file as a downloadable result', async () => {
+    const { cookie } = await signIn(h, 'noasset@example.test')
+    const page = await h.app.inject({ method: 'GET', url: '/tools/watermark', headers: { cookie } })
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/tools/watermark',
+      headers: uploadHeaders(cookieJar(cookie, page)),
+      payload: multipart({ mark: 'image', _csrf: csrfFrom(page.body) }, [
+        { name: 'files', filename: 'base.png', data: await samplePng(100, 80) },
+        { name: 'markFile', filename: 'logo.png', data: await samplePng(30, 30) },
+      ]),
+    })
+    const id = String(res.headers.location).replace('/jobs/', '')
+    const asset = (await h.ctx.jobs.listFiles(id)).find((f) => f.role === 'asset')!
+
+    const fetched = await h.app.inject({ method: 'GET', url: `/jobs/${id}/files/${asset.id}`, headers: { cookie } })
+    expect(fetched.statusCode).toBe(404)
+  })
+
+  it('offers a comparison on the results page when an original is available', async () => {
+    const { cookie } = await signIn(h, 'cmpui@example.test')
+    const { id } = await jobWithFiles(cookie)
+    const page = await h.app.inject({ method: 'GET', url: `/jobs/${id}`, headers: { cookie } })
+    expect(page.body).toContain('data-compare')
+  })
+
+  it('does not offer a comparison for a tool that had no input', async () => {
+    const { cookie } = await signIn(h, 'nocmp@example.test')
+    const page = await h.app.inject({ method: 'GET', url: '/tools/html-to-image', headers: { cookie } })
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/tools/html-to-image',
+      headers: uploadHeaders(cookieJar(cookie, page)),
+      payload: multipart(
+        { source: 'html', html: '<h1>hi</h1>', width: '400', height: '200', _csrf: csrfFrom(page.body) },
+        [],
+      ),
+    })
+    const id = String(res.headers.location).replace('/jobs/', '')
+    await h.ctx.queue.close()
+    const jobPage = await h.app.inject({ method: 'GET', url: `/jobs/${id}`, headers: { cookie } })
+    expect(jobPage.body).not.toContain('data-compare')
+  })
+})

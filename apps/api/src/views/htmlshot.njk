@@ -2,6 +2,7 @@
 {% import "_macros.njk" as m %}
 {% import "_icons.njk" as ic %}
 {% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block mainClass %}wrap-wide{% endblock %}
 {% block content %}
 
 <nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
@@ -12,6 +13,9 @@
   <h1 class="page-title">{{ tool.title }}</h1>
   <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> to use this.</div>
 {% else %}
+
+<h1 class="page-title">{{ tool.title }}</h1>
+{% if tool.ui.blurb %}<p class="lede">{{ tool.ui.blurb }}</p>{% endif %}
 
 <form class="workspace" method="post" action="/tools/{{ tool.id }}" data-htmlshot>
   <input type="hidden" name="_csrf" value="{{ csrfToken }}">
@@ -47,8 +51,7 @@
 
   <aside class="panel">
     <div class="panel-head">
-      <h1><span class="panel-icon">{{ ic.icon('code', 20) }}</span>HTML to image</h1>
-      <p class="muted">Turn a web page or a snippet of markup into a picture.</p>
+      <h2 class="panel-title"><span class="panel-icon">{{ ic.icon('code', 18) }}</span>Settings</h2>
     </div>
 
     {# The source switch first: it decides which of the two inputs below applies. #}

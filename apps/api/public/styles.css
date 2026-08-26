@@ -4,19 +4,48 @@
 :root {
   --bg: #f7f7f9;
   --surface: #ffffff;
-  --surface-2: #f0f1f4;
-  --border: #dcdee5;
+  --surface-2: #eceef3;
+  /* A recessed inset used for checkerboards and letterboxing: it has to be
+     visible, or a transparent PNG looks identical to a white one. */
+  --inset: #dfe1e8;
+  /* Two border roles. A decorative seam may be quiet; the boundary of a
+     control must be locatable (WCAG 1.4.11 wants 3:1). */
+  --border: #cfd2db;
+  --border-strong: #818799;
   --text: #1a1c22;
   --text-muted: #5c6070;
   --accent: #c2410c;
   --accent-hover: #9a3412;
   --accent-soft: #fff1e9;
-  --ok: #15803d;
+  /* The label colour on a filled accent surface. A separate decision from the
+     accent itself: in dark mode the accent is light and cannot carry white. */
+  --accent-ink: #ffffff;
+  --ok: #116b32;
   --ok-soft: #eaf7ee;
   --danger: #b91c1c;
   --danger-soft: #fdecec;
+  /* Type scale — seven steps on a ~1.25 ratio. The sheet previously used
+     thirteen sizes, four of them one pixel apart, which produces no
+     perceptible ranking. */
+  --fs-2xs: 0.6875rem;  /* 11px  badges, overlay marks */
+  --fs-xs:  0.75rem;    /* 12px  eyebrows, pills, panel labels */
+  --fs-sm:  0.8125rem;  /* 13px  dense metadata, table headers */
+  --fs-ui:  0.875rem;   /* 14px  default for controls and UI text */
+  --fs-md:  1rem;       /* 16px  body prose */
+  --fs-lg:  1.375rem;   /* 22px  section headings */
+  --fs-xl:  1.75rem;    /* 28px  page title */
+
+  /* Spacing — a 4px grid. Previously 28 arbitrary values, including 15 and 16
+     used for the same role in the same panel. */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  --radius-sm: 6px;
   --radius: 10px;
-  --radius-lg: 16px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --topbar-h: 62px;
+  --float-h: 44px;
   --shadow: 0 1px 2px rgba(16, 18, 26, 0.06), 0 4px 12px rgba(16, 18, 26, 0.05);
   --wrap: 1080px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -27,13 +56,17 @@
   :root {
     --bg: #14161b;
     --surface: #1c1f26;
-    --surface-2: #23262f;
-    --border: #31353f;
+    --surface-2: #171a20;
+    --inset: #2b2f3a;
+    --border: #3a3f4b;
+    --border-strong: #6b7385;
     --text: #e8eaef;
     --text-muted: #9aa0b0;
     --accent: #fb923c;
     --accent-hover: #fdba74;
     --accent-soft: #2a1d14;
+    /* #fff on #fb923c is 2.26:1 and fails AA; near-black is 7.52:1. */
+    --accent-ink: #1a1c22;
     --ok: #4ade80;
     --ok-soft: #16251c;
     --danger: #f87171;
@@ -53,27 +86,44 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 16px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  /* No -webkit-font-smoothing override: it thins text on macOS only, and is
+     why this sheet reached for 550/650 weights that no Windows UI font has. */
+  text-rendering: optimizeLegibility;
 }
+
+/* Three real weights. 550 and 650 do not exist in Segoe UI and silently
+   resolved to 600/700 there, so emphasis differed by platform. */
+h1, h2, h3, h4 { font-weight: 600; line-height: 1.25; }
 
 .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 20px; }
 .narrow { max-width: 480px; margin: 0 auto; }
 .center { text-align: center; }
 .muted { color: var(--text-muted); }
-.hint { color: var(--text-muted); font-size: 0.875rem; margin: 6px 0 0; }
+/* Zero margin: .field is a flex column with its own 6px gap, so a margin here
+   added to it and pushed help text 12px below a label sitting 6px above. */
+.hint { color: var(--text-muted); font-size: var(--fs-sm); margin: 0; }
+.panel-footer .hint, .form-actions .hint, .crumbs + .hint { margin-top: var(--s-2); }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .skip {
   position: absolute; left: -9999px;
-  background: var(--accent); color: #fff; padding: 10px 16px; z-index: 100;
+  background: var(--accent); color: var(--accent-ink); padding: 10px 16px; z-index: 100;
 }
 .skip:focus { left: 12px; top: 12px; }
 
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* One ring for everything. The surface-coloured halo keeps it visible even on
+   an accent-filled control. No border-radius here: focus must never change an
+   element's geometry, which the old `border-radius: 4px` did to every button
+   and card. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
 
 /* ---------- top bar ---------- */
 .topbar {
@@ -82,15 +132,19 @@ a:hover { text-decoration: underline; }
   position: sticky; top: 0; z-index: 20;
 }
 .topbar-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; gap: 16px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 650; }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; }
 .brand:hover { text-decoration: none; }
 .brand-mark { width: 26px; height: 26px; color: var(--accent); flex: none; }
 .brand-name { font-size: 1.0625rem; letter-spacing: -0.01em; }
 
 .nav { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.nav > a { color: var(--text-muted); font-size: 0.9375rem; font-weight: 500; }
-.nav > a:hover { color: var(--text); text-decoration: none; }
-.nav-user { color: var(--text) !important; }
+/* Scoped so it styles bare nav links only. Unscoped, `.nav > a` (0,1,1) beat
+   `.btn-primary` (0,1,0) and rendered the sign-in button's label muted grey on
+   orange — 1.21:1, effectively invisible. The old `!important` on .nav-user was
+   a patch for the same collision. */
+.nav > a:not(.btn) { color: var(--text-muted); font-size: var(--fs-ui); font-weight: 500; }
+.nav > a:not(.btn):hover { color: var(--text); text-decoration: none; }
+.nav-user { color: var(--text); }
 .inline-form { display: inline; }
 
 /* ---------- buttons ---------- */
@@ -98,12 +152,12 @@ a:hover { text-decoration: underline; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); color: var(--text);
-  font: inherit; font-size: 0.9375rem; font-weight: 550;
+  font: inherit; font-size: var(--fs-ui); font-weight: 600;
   cursor: pointer; transition: background 0.14s, border-color 0.14s, transform 0.06s;
 }
 .btn:hover { background: var(--surface-2); text-decoration: none; }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-lg { padding: 12px 22px; font-size: 1rem; }
 .btn-sm { padding: 5px 10px; font-size: 0.8125rem; }
@@ -116,7 +170,7 @@ a:hover { text-decoration: underline; }
 .hero { padding: 64px 0 44px; max-width: 720px; }
 .eyebrow {
   text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem;
-  font-weight: 650; color: var(--accent); margin: 0 0 14px;
+  font-weight: 700; color: var(--accent); margin: 0 0 14px;
 }
 .hero h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.12; letter-spacing: -0.025em; margin: 0 0 18px; }
 .accent { color: var(--accent); }
@@ -126,8 +180,8 @@ a:hover { text-decoration: underline; }
 /* ---------- tool grid ---------- */
 .group { margin: 40px 0; }
 .group-head { margin-bottom: 16px; }
-.group-head h2 { font-size: 1.25rem; margin: 0 0 2px; letter-spacing: -0.01em; }
-.group-head p { margin: 0; font-size: 0.9375rem; }
+.group-head h2 { margin: 0 0 var(--s-1); }
+.group-head p { margin: 0; font-size: var(--fs-ui); }
 
 .tool-grid {
   list-style: none; padding: 0; margin: 0; display: grid; gap: 12px;
@@ -139,14 +193,16 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-lg); color: var(--text);
   transition: border-color 0.14s, box-shadow 0.14s, transform 0.14s;
 }
+/* No lift: translating a card re-rasterises its text, and springy hover is a
+   consumer idiom that undercuts a precise instrument. */
 .tool-card:hover {
   text-decoration: none; border-color: var(--accent);
-  box-shadow: var(--shadow); transform: translateY(-2px);
+  background: var(--accent-soft); box-shadow: var(--shadow);
 }
 .tool-icon {
   width: 34px; height: 34px; border-radius: 9px; margin-bottom: 8px;
   background: var(--accent-soft); color: var(--accent);
-  display: grid; place-items: center; font-weight: 700; font-size: 0.9375rem;
+  display: grid; place-items: center; font-weight: 700; font-size: var(--fs-ui);
 }
 .tool-title { font-weight: 600; }
 .tool-blurb { font-size: 0.875rem; color: var(--text-muted); line-height: 1.45; }
@@ -157,14 +213,20 @@ a:hover { text-decoration: underline; }
   margin: 56px 0; padding: 24px; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
-.assurance h3 { margin: 0 0 4px; font-size: 0.9375rem; }
+.assurance h3 { margin: 0 0 4px; font-size: var(--fs-ui); }
 .assurance p { margin: 0; font-size: 0.875rem; color: var(--text-muted); }
 
 /* ---------- forms ---------- */
 .crumbs { padding: 22px 0 0; font-size: 0.875rem; color: var(--text-muted); }
 .crumbs span { margin: 0 6px; }
-.page-title { font-size: clamp(1.6rem, 3.4vw, 2.1rem); letter-spacing: -0.02em; margin: 14px 0 8px; }
-.section-title { font-size: 1.125rem; margin: 36px 0 12px; }
+.page-title { font-size: clamp(1.5rem, 3vw, var(--fs-xl)); letter-spacing: -0.02em; line-height: 1.2; margin: var(--s-3) 0 var(--s-2); }
+/* One size for one semantic level, with the same optical tracking as h1.
+   Previously h1->h2 dropped 16px while h2->body dropped 2px, so section
+   headings were indistinguishable from the text beneath them. */
+.section-title, .group-head h2 {
+  font-size: var(--fs-lg); letter-spacing: -0.015em; line-height: 1.25;
+  margin: var(--s-6) 0 var(--s-4);
+}
 
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
@@ -172,7 +234,7 @@ a:hover { text-decoration: underline; }
 .field input[type="text"], .field input[type="email"], .field input[type="password"],
 .field input[type="number"], .field select {
   padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface); color: var(--text); font: inherit; font-size: 0.9375rem; width: 100%;
+  background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-ui); width: 100%;
 }
 .field input[type="color"] { width: 56px; height: 38px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .toggle { display: flex; align-items: center; gap: 9px; }
@@ -191,8 +253,17 @@ a:hover { text-decoration: underline; }
   position: absolute; inset: 0; width: 100%; height: 100%;
   opacity: 0; cursor: pointer;
 }
-.dropzone-label { display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
-.dropzone-label strong { font-size: 1.0625rem; color: var(--accent); }
+.dropzone-label { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); pointer-events: none; }
+/* Reads as a button rather than as a link. Accent text with no underline is
+   exactly how this sheet styles links, so the primary affordance was
+   masquerading as one. */
+.dropzone-label strong {
+  font-size: var(--fs-ui); font-weight: 600; color: var(--accent-ink);
+  background: var(--accent); border-radius: var(--radius);
+  padding: 9px 18px; min-height: var(--control-h);
+  display: inline-flex; align-items: center;
+}
+.dropzone-meta { font-size: var(--fs-sm); color: var(--text-muted); }
 
 .file-list { list-style: none; margin: 18px 0 0; padding: 0; text-align: left; display: grid; gap: 6px; }
 .file-list li {
@@ -201,19 +272,25 @@ a:hover { text-decoration: underline; }
 }
 
 .options { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin: 0; background: var(--surface); }
-.options legend { padding: 0 8px; font-size: 0.875rem; font-weight: 650; }
+.options legend { padding: 0 8px; font-size: 0.875rem; font-weight: 700; }
 .option-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .form-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 
 /* ---------- alerts ---------- */
 .alert {
   padding: 12px 16px; border-radius: var(--radius); margin: 16px 0;
-  background: var(--surface-2); border: 1px solid var(--border); font-size: 0.9375rem;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: var(--fs-ui);
 }
 .alert p { margin: 4px 0 0; }
-.alert-error { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
-.alert-error a, .alert-error strong { color: inherit; }
-.alert-ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+/* Semantics carry on the rule and the heading, not on the body copy: fully
+   colorised paragraphs read as amateur and cost contrast (neutral text on the
+   same tint measures 14.9:1 against the danger colour's 5.7:1). */
+.alert { border-left: 3px solid var(--border-strong); color: var(--text); }
+.alert p { color: var(--text-muted); }
+.alert-error { background: var(--danger-soft); border-left-color: var(--danger); }
+.alert-error > strong { color: var(--danger); }
+.alert-ok { background: var(--ok-soft); border-left-color: var(--ok); }
+.alert-ok > strong { color: var(--ok); }
 
 /* ---------- job page ---------- */
 .job-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -231,7 +308,7 @@ a:hover { text-decoration: underline; }
 
 .pill {
   display: inline-block; padding: 3px 10px; border-radius: 99px;
-  font-size: 0.75rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   background: var(--surface-2); color: var(--text-muted);
 }
 .pill-done { background: var(--ok-soft); color: var(--ok); }
@@ -248,14 +325,14 @@ a:hover { text-decoration: underline; }
 }
 .result-preview {
   display: block; aspect-ratio: 4 / 3; border-radius: 8px; overflow: hidden;
-  background: var(--surface-2);
+  background: var(--inset);
 }
 .result-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .result-meta { display: flex; flex-direction: column; gap: 1px; font-size: 0.8125rem; min-width: 0; }
-.result-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .inputs { margin: 26px 0; }
-.inputs summary { cursor: pointer; font-size: 0.9375rem; color: var(--text-muted); }
+.inputs summary { cursor: pointer; font-size: var(--fs-ui); color: var(--text-muted); }
 .plain-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 4px; font-size: 0.875rem; }
 
 .next-steps { margin: 44px 0 60px; }
@@ -267,14 +344,14 @@ a:hover { text-decoration: underline; }
 .chip:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 
 /* ---------- tables ---------- */
-.table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.9375rem; }
+.table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: var(--fs-ui); }
 .table th, .table td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); }
-.table th { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 650; }
+.table th { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 700; }
 .table tbody tr:hover { background: var(--surface); }
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .table-scroll { overflow-x: auto; }
 
-.detail { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; margin: 18px 0 30px; font-size: 0.9375rem; }
+.detail { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; margin: 18px 0 30px; font-size: var(--fs-ui); }
 .detail dt { color: var(--text-muted); }
 .detail dd { margin: 0; }
 
@@ -310,12 +387,18 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
    The <form> itself is the grid, so both panes submit together.
    ============================================================ */
 
+/* Workspace pages are not prose: the image gets the width. Inside the 1080px
+   prose container the canvas was left with 668px on any monitor. */
+.wrap-wide { --wrap: 1440px; }
+
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 350px;
-  gap: 22px;
-  align-items: start;
-  margin: 18px 0 60px;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 380px);
+  gap: var(--s-5);
+  /* stretch, not start: gives the panel free space so its footer can sit on
+     the stage floor. */
+  align-items: stretch;
+  margin: var(--s-5) 0 var(--s-8);
 }
 
 .stage {
@@ -333,30 +416,30 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   display: flex; align-items: center; justify-content: space-between;
   gap: 14px; flex-wrap: wrap;
 }
-.stage-count { font-size: 0.9375rem; color: var(--text-muted); }
+.stage-count { font-size: var(--fs-ui); color: var(--text-muted); }
 .stage-count strong { color: var(--text); font-size: 1.0625rem; }
 .stage-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .filter-chips { display: inline-flex; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 99px; }
 .chip-btn {
   border: 0; background: transparent; color: var(--text-muted);
-  font: inherit; font-size: 0.8125rem; font-weight: 550;
+  font: inherit; font-size: 0.8125rem; font-weight: 600;
   padding: 5px 13px; border-radius: 99px; cursor: pointer;
 }
 .chip-btn:hover { color: var(--text); }
-.chip-btn.is-active { background: var(--accent); color: #fff; }
+.chip-btn.is-active { background: var(--accent); color: var(--accent-ink); }
 
 .count-badge {
   display: inline-grid; place-items: center; min-width: 19px; height: 19px;
   margin-left: 7px; padding: 0 5px; border-radius: 99px;
-  background: var(--accent); color: #fff; font-size: 0.6875rem; font-weight: 700;
+  background: var(--accent); color: var(--accent-ink); font-size: var(--fs-2xs); font-weight: 700;
 }
 
 /* The dropzone fills the stage while empty, then shrinks to a slim strip. */
 .stage .dropzone { flex: 1; display: grid; place-items: center; background: var(--surface); }
 .stage.has-files .dropzone { flex: none; padding: 18px; }
 .stage.has-files .dropzone-icon { display: none; }
-.stage.has-files .dropzone-label strong { font-size: 0.9375rem; }
+.stage.has-files .dropzone-label strong { font-size: var(--fs-ui); }
 .dropzone-icon { color: var(--accent); margin-bottom: 6px; }
 
 .thumb-grid {
@@ -383,9 +466,12 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   display: grid; place-items: center;
   overflow: hidden;
   border-radius: 8px;
+  /* A checkerboard has to be legible or it communicates nothing: at 1.13:1
+     against the surface it was invisible, so transparency looked like white. */
   background:
-    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%, transparent 75%, var(--surface-2) 75%) 0 0 / 16px 16px,
-    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%, transparent 75%, var(--surface-2) 75%) 8px 8px / 16px 16px;
+    linear-gradient(45deg, var(--inset) 25%, transparent 25%, transparent 75%, var(--inset) 75%) 0 0 / 16px 16px,
+    linear-gradient(45deg, var(--inset) 25%, transparent 25%, transparent 75%, var(--inset) 75%) 8px 8px / 16px 16px,
+    var(--surface);
 }
 .thumb-frame img {
   max-width: 100%; max-height: 100%;
@@ -396,7 +482,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 }
 
 .thumb-name {
-  font-size: 0.75rem; font-weight: 550;
+  font-size: 0.75rem; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .thumb-meta { font-size: 0.6875rem; color: var(--text-muted); display: flex; justify-content: space-between; gap: 8px; }
@@ -406,7 +492,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   width: 24px; height: 24px; border-radius: 50%;
   border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
   display: grid; place-items: center; cursor: pointer;
-  font-size: 15px; line-height: 1; padding: 0;
+  font-size: var(--fs-md); line-height: 1; padding: 0;
   opacity: 0; transition: opacity 0.14s;
 }
 .thumb:hover .thumb-remove, .thumb-remove:focus-visible { opacity: 1; }
@@ -416,13 +502,13 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .crop-overlay {
   position: absolute; inset: 0; pointer-events: none;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
-  border: 1.5px solid var(--accent);
+  border: 2px solid var(--accent);
   border-radius: 2px;
 }
 /* Caption and watermark previews drawn over the thumbnail. */
 .thumb-caption {
   position: absolute; left: 4px; right: 4px; pointer-events: none;
-  text-align: center; font-weight: 800; line-height: 1.05;
+  text-align: center; font-weight: 700; line-height: 1.05;
   color: #fff; -webkit-text-stroke: 1px #000; text-transform: uppercase;
   overflow: hidden;
 }
@@ -430,7 +516,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .thumb-caption.is-bottom { bottom: 6px; }
 .thumb-mark {
   position: absolute; pointer-events: none;
-  font-weight: 700; font-size: 0.625rem; white-space: nowrap;
+  font-weight: 700; font-size: var(--fs-2xs); white-space: nowrap;
 }
 .thumb-mark.tiled {
   inset: 0; display: grid; place-content: center;
@@ -440,7 +526,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   position: absolute; bottom: 6px; left: 6px;
   padding: 2px 7px; border-radius: 5px;
   background: rgba(0, 0, 0, 0.72); color: #fff;
-  font-size: 0.625rem; font-weight: 650; letter-spacing: 0.02em;
+  font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.02em;
 }
 
 .stage-hint { margin: 0; font-size: 0.8125rem; color: var(--text-muted); }
@@ -448,8 +534,12 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .stage-empty h2 { margin: 0; }
 
 /* ---- settings panel ---- */
+/* The inspector is a flat, flush sidebar; the canvas is the recessed well.
+   Previously the 350px column of form fields carried the heaviest shadow on
+   screen and the image carried none, inverting the subject. */
 .panel {
-  position: sticky; top: 80px;
+  position: sticky; top: calc(var(--topbar-h) + 17px);
+  min-height: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -509,23 +599,23 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 .crop-box {
   position: absolute; pointer-events: none;
-  border: 1.5px solid var(--accent);
+  border: 2px solid var(--accent);
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
 }
 .crop-label {
   position: absolute; top: -22px; left: 0;
   padding: 1px 6px; border-radius: 4px;
-  background: var(--accent); color: #fff;
-  font-size: 0.6875rem; font-weight: 650; white-space: nowrap;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: var(--fs-2xs); font-weight: 700; white-space: nowrap;
 }
 .editor-caption {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  pointer-events: none; font-weight: 800; text-align: center;
+  pointer-events: none; font-weight: 700; text-align: center;
   -webkit-text-stroke: 1px rgba(0, 0, 0, 0.65); line-height: 1.05;
   max-width: 90%; word-break: break-word;
 }
 
-.editor-panel { max-height: calc(100vh - 110px); overflow-y: auto; }
+.editor-panel { max-height: calc(100vh - var(--topbar-h) - 33px); overflow-y: auto; }
 .panel-group { border-bottom: 1px solid var(--border); padding-bottom: 15px; }
 .panel-group:last-of-type { border-bottom: 0; padding-bottom: 0; }
 .panel-group .quick-row { grid-template-columns: 1fr 1fr; }
@@ -566,7 +656,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 .crop-selection {
   position: absolute; cursor: move;
-  outline: 1.5px solid #fff;
+  outline: 2px solid #fff;
   box-shadow: 0 0 0 9999px rgba(10, 12, 18, 0.55);
 }
 /* Rule-of-thirds guides, the standard aid for placing a crop. */
@@ -593,15 +683,18 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .crop-size {
   position: absolute; top: -25px; left: 0;
   padding: 2px 8px; border-radius: 5px;
-  background: var(--accent); color: #fff;
-  font-size: 0.6875rem; font-weight: 700; white-space: nowrap;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: var(--fs-2xs); font-weight: 700; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .crop-handle {
   position: absolute; width: 12px; height: 12px;
-  background: #fff; border: 1.5px solid var(--accent); border-radius: 2px;
+  background: #fff; border: 2px solid var(--accent); border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
+/* A 24px target without enlarging the 12px visual (WCAG 2.5.8). */
+.crop-handle::after { content: ''; position: absolute; inset: -8px; }
 .crop-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }
 .crop-handle-n  { top: -7px; left: 50%; margin-left: -6px; cursor: ns-resize; }
 .crop-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
@@ -613,7 +706,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 .ratio-row { display: flex; gap: 5px; flex-wrap: wrap; }
 .ratio-row .chip-btn { border: 1px solid var(--border); background: var(--surface); }
-.ratio-row .chip-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ratio-row .chip-btn.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 .crop-filmstrip {
   list-style: none; margin: 0; padding: 0;
@@ -641,17 +734,17 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   cursor: pointer; transition: background 0.14s, color 0.14s;
 }
 .segment span:hover { color: var(--text); }
-.segment input:checked + span { background: var(--accent); color: #fff; }
+.segment input:checked + span { background: var(--accent); color: var(--accent-ink); }
 .segment input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Before → after size chips on a thumbnail. */
-.thumb-sizes { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 0.625rem; }
+.thumb-sizes { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: var(--fs-2xs); }
 .size-chip {
-  padding: 2px 6px; border-radius: 5px; font-weight: 650;
+  padding: 2px 6px; border-radius: 5px; font-weight: 700;
   background: var(--surface-2); color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.size-chip.is-after { background: var(--accent); color: #fff; }
+.size-chip.is-after { background: var(--accent); color: var(--accent-ink); }
 .size-arrow { color: var(--text-muted); }
 
 /* ============================================================
@@ -682,7 +775,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 .spinner {
   width: 26px; height: 26px; border-radius: 50%;
-  border: 2.5px solid var(--border); border-top-color: var(--accent);
+  border: 3px solid var(--border); border-top-color: var(--accent);
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -706,7 +799,8 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 /* Batch navigation, floated over the top of the canvas. */
 .canvas-nav {
-  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: var(--s-4); left: 50%; transform: translateX(-50%);
+  min-height: var(--float-h);
   z-index: 4; display: flex; align-items: center; gap: 4px;
   padding: 5px; border-radius: 12px;
   background: var(--surface); border: 1px solid var(--border);
@@ -721,20 +815,21 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .nav-step:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .nav-select {
   max-width: 260px; border: 0; background: transparent; color: var(--text);
-  font: inherit; font-size: 0.8125rem; font-weight: 550;
+  font: inherit; font-size: 0.8125rem; font-weight: 600;
   padding: 6px 8px; cursor: pointer;
 }
 
 /* Add-more, as a floating action with the loaded count. */
 .canvas-add {
-  position: absolute; top: 16px; right: 16px; z-index: 4;
-  width: 46px; height: 46px; border-radius: 50%; padding: 0;
+  position: absolute; top: var(--s-4); right: var(--s-4); z-index: 4;
+  /* Matched to .canvas-nav so the only two floating controls align. */
+  width: var(--float-h); height: var(--float-h); border-radius: 50%; padding: 0;
   display: grid; place-items: center; cursor: pointer;
-  background: var(--accent); color: #fff; border: 0;
+  background: var(--accent); color: var(--accent-ink); border: 0;
   box-shadow: var(--shadow-lg);
   transition: transform 0.14s, background 0.14s;
 }
-.canvas-add:hover { background: var(--accent-hover); transform: scale(1.06); }
+.canvas-add:hover { background: var(--accent-hover); }
 .canvas-add-count {
   position: absolute; top: -5px; left: -5px;
   min-width: 20px; height: 20px; padding: 0 5px; border-radius: 99px;
@@ -743,7 +838,17 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   font-size: 0.6875rem; font-weight: 700; line-height: 1;
 }
 
-.canvas-stage .dropzone { flex: 1; display: grid; place-items: center; background: transparent; border: 0; }
+/* A bounded, obviously-droppable well. Stripping the border and background
+   left a 70vh void with floating orange text and no visible target. */
+.canvas-stage .dropzone {
+  flex: 1; display: grid; place-items: center;
+  background: var(--surface);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.14s, background 0.14s;
+}
+.canvas-stage .dropzone:hover,
+.canvas-stage .dropzone:focus-within { border-color: var(--accent); background: var(--accent-soft); }
 .canvas-stage.has-files .dropzone {
   /* Once loaded, the dropzone stops taking space but keeps accepting drops. */
   position: absolute; inset: 0; padding: 0; opacity: 0; pointer-events: none;
@@ -764,7 +869,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 }
 
 .canvas-caption { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
-.canvas-name { font-size: 0.875rem; font-weight: 550; max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-name { font-size: 0.875rem; font-weight: 600; max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-remove {
   border: 0; background: none; color: var(--text-muted);
   font: inherit; font-size: 0.8125rem; cursor: pointer; text-decoration: underline;
@@ -791,6 +896,17 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   :root { --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.45), 0 18px 40px rgba(0, 0, 0, 0.4); }
 }
 
+/* Interactive boundaries must be locatable: the shared hairline measures
+   1.34:1 against white, so controls get the stronger token. */
+.btn,
+.field input[type="text"], .field input[type="email"], .field input[type="password"],
+.field input[type="number"], .field input[type="url"], .field input[type="color"],
+.field select, .field textarea,
+.dropzone, .thumb-remove, .nav-step, .segmented, .ratio-row .chip-btn {
+  border-color: var(--border-strong);
+}
+.btn-quiet, .btn-danger { border-color: transparent; }
+
 /* Uniform control height makes a panel read as one system. */
 .field input[type="text"], .field input[type="email"], .field input[type="password"],
 .field input[type="number"], .field input[type="url"], .field select, .btn {
@@ -798,13 +914,14 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 }
 .btn-sm { min-height: 30px; }
 
-.field input:focus, .field select:focus, .field textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
-}
+/* Never `outline: none` on a focusable control. Pointer focus tints the border;
+   keyboard focus additionally gets the ring above. The previous replacement ring
+   measured 1.30:1 against white, well under the 3:1 required for a state
+   indicator. */
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
 
-.panel { box-shadow: var(--shadow-lg); }
+.panel { box-shadow: none; }
+.stage { box-shadow: inset 0 1px 3px rgba(16, 18, 26, 0.05); }
 .tool-card:hover { box-shadow: var(--shadow-lg); }
 
 /* Tabular figures everywhere a number changes in place, so the layout does not
@@ -832,7 +949,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 }
 .carried-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.875rem; }
 .carried-badge {
-  padding: 2px 8px; border-radius: 5px; background: var(--accent); color: #fff;
+  padding: 2px 8px; border-radius: 5px; background: var(--accent); color: var(--accent-ink);
   font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
 }
 .carried-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 10px; flex-wrap: wrap; }
@@ -842,3 +959,104 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   border: 1px solid var(--border); background: var(--surface);
 }
 .carried-name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============================================================
+   Before / after comparison
+   ============================================================ */
+
+.compare-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; }
+.compare {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.compare-frame {
+  position: relative; overflow: hidden; border-radius: 8px;
+  background: var(--surface-2); cursor: ew-resize; touch-action: none;
+  user-select: none; line-height: 0;
+}
+.compare-frame img { width: 100%; display: block; -webkit-user-drag: none; }
+
+/* The original is clipped to the divider position, over the result. */
+.compare-before {
+  position: absolute; inset: 0; width: 50%; overflow: hidden;
+}
+.compare-before img { width: auto; height: 100%; max-width: none; object-fit: cover; }
+
+.compare-handle {
+  position: absolute; top: 0; bottom: 0; left: 50%;
+  width: 2px; margin-left: -1px; background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+  cursor: ew-resize;
+}
+.compare-grip {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.compare-grip::before, .compare-grip::after {
+  content: ''; position: absolute; top: 50%; width: 0; height: 0;
+  border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+}
+.compare-grip::before { left: 8px; transform: translateY(-50%); border-right: 6px solid var(--text); }
+.compare-grip::after { right: 8px; transform: translateY(-50%); border-left: 6px solid var(--text); }
+.compare-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.compare-tag {
+  position: absolute; top: 10px; padding: 3px 9px; border-radius: 6px;
+  background: rgba(12, 14, 20, 0.72); color: #fff;
+  font-size: 0.6875rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.compare-tag.is-before { left: 10px; }
+.compare-tag.is-after { right: 10px; background: var(--accent); color: var(--accent-ink); }
+
+.compare-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.8125rem; }
+.compare-meta .result-name { flex: 1; min-width: 0; }
+
+/* The settings panel is labelled, not titled: the page's h1 belongs to the
+   page, not to a sidebar. */
+.panel-title {
+  display: flex; align-items: center; gap: var(--s-2); margin: 0;
+  font-size: var(--fs-xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+}
+
+/* Panel rhythm on the 4px grid. Two dividers with the same role now share
+   their metrics instead of differing by a pixel. */
+.panel { padding: var(--s-4); gap: var(--s-4); }
+.panel-fields { gap: var(--s-4); }
+.panel-group, .quick-rotate { border-bottom: 1px solid var(--border); padding-bottom: var(--s-4); }
+.panel-group:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.panel-footer { padding-top: var(--s-4); }
+.stage, .canvas-stage { padding: var(--s-4); }
+
+/* Onward tool links stop competing with the download. */
+.next-steps { margin: var(--s-7) 0 var(--s-8); padding-top: var(--s-5); border-top: 1px solid var(--border); }
+.next-steps .section-title {
+  margin-top: 0; font-size: var(--fs-xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+}
+.chip { font-size: var(--fs-sm); color: var(--text-muted); }
+
+@media (prefers-color-scheme: dark) {
+  .stage { box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35); }
+}
+
+/* Checkbox rows: the label sits beside the box and the whole row is clickable. */
+.check-row {
+  display: flex; align-items: center; gap: var(--s-2);
+  font-size: var(--fs-ui); font-weight: 500; cursor: pointer;
+  min-height: 26px;
+}
+.check-row input { width: 16px; height: 16px; flex: none; accent-color: var(--accent); cursor: pointer; }
+.check-row span { user-select: none; }
+.field-toggle { gap: 0; }
+/* Help text aligns with the label, not the checkbox. */
+.hint-indent { margin-top: var(--s-1); padding-left: calc(16px + var(--s-2)); }
+
+/* A colour input should read as a swatch, not as an empty box. */
+.field input[type="color"] {
+  width: 100%; max-width: 84px; height: 34px; padding: 3px;
+  border-radius: var(--radius-sm); cursor: pointer;
+}
