@@ -129,7 +129,10 @@ a:hover { text-decoration: underline; }
 .topbar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 20;
+  /* sticky already establishes a containing block; relative is stated so the
+     panel's anchoring does not depend on that side effect. */
+  position: sticky; position: relative; position: sticky;
+  top: 0; z-index: 20;
 }
 .topbar-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; gap: 16px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; }
@@ -1065,7 +1068,7 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
    Tools menu in the header
    ============================================================ */
 
-.menu { position: relative; }
+.menu { position: static; }
 .menu-trigger {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 7px 11px; border-radius: var(--radius-sm);
@@ -1078,25 +1081,33 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .menu-trigger:hover { background: var(--surface-2); }
 .menu[open] .menu-trigger { background: var(--accent-soft); color: var(--accent); }
 .menu[open] .menu-trigger > svg { transform: rotate(180deg); }
-.menu-trigger svg { transition: transform 0.16s; }
+.menu-trigger > svg { transition: transform 0.16s; }
 
+/*
+ * A full-width panel spanning the header, not a box hung off the trigger.
+ * Anchored to the trigger it could not fit: at a 1000px viewport a 900px panel
+ * anchored to its right edge extends past x=0 and is clipped off-screen. The
+ * header is the widest available containing block, so it always fits.
+ */
 .menu-panel {
-  position: absolute; top: calc(100% + 10px); left: 0; z-index: 30;
-  /* Five short columns rather than three tall ones: every tool is visible at
-     once, with no scrolling and nothing clipped. */
-  display: grid; grid-template-columns: repeat(5, max-content);
-  gap: var(--s-3) var(--s-5);
-  align-items: start;
-  padding: var(--s-4) var(--s-5);
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
-  max-width: min(94vw, 900px);
+  padding: var(--s-5) 20px var(--s-6);
+  max-width: none;
+  /* Only ever needed on a very short window. */
+  max-height: calc(100vh - var(--topbar-h)); overflow-y: auto;
 }
-/* Anchored to the trigger's right edge so a wide panel stays on screen. */
-@media (min-width: 861px) {
-  .menu-panel { left: auto; right: 0; }
+/* Centre the grid on the page measure rather than letting it sprawl. */
+.menu-panel::before, .menu-panel::after { content: none; }
+
+/* Columns sit on the page measure, so the menu lines up with the content. */
+.menu-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: grid; gap: var(--s-5);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: start;
 }
 
 .menu-group-title {
@@ -1106,26 +1117,24 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 .menu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .menu-list a {
   display: flex; gap: var(--s-2); align-items: center;
-  padding: 6px var(--s-2); border-radius: var(--radius-sm); color: var(--text);
-  white-space: nowrap;
+  padding: 7px var(--s-2); border-radius: var(--radius-sm); color: var(--text);
 }
 .menu-list a:hover { background: var(--accent-soft); text-decoration: none; }
 .menu-list a:hover .menu-name { color: var(--accent); }
 .menu-icon {
   color: var(--accent); flex: none;
   display: grid; place-items: center;
-  width: 24px; height: 24px; border-radius: var(--radius-sm); background: var(--accent-soft);
+  width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--accent-soft);
 }
 .menu-name { font-size: var(--fs-ui); font-weight: 500; }
 
 @media (max-width: 860px) {
-  /* On a narrow screen the panel becomes an in-flow accordion rather than an
-     overlay that cannot fit. */
+  /* In-flow accordion on a narrow screen, rather than an overlay. */
   .menu-panel {
-    position: static; grid-template-columns: 1fr; max-width: none;
-    box-shadow: none; border: 0; padding: var(--s-3) 0; gap: var(--s-4);
+    position: static; box-shadow: none; border: 0;
+    padding: var(--s-3) 0; max-height: none;
   }
-  .menu-list a { white-space: normal; }
+  .menu-inner { grid-template-columns: 1fr; gap: var(--s-4); }
 }
 
 /* ============================================================
@@ -1198,4 +1207,44 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 @media (max-width: 900px) {
   .editor-body { grid-template-columns: 1fr; }
+}
+
+/* ---- editor: apply / save, and the applied-change log ---- */
+
+.apply-bar {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2);
+  padding-top: var(--s-3); border-top: 1px solid var(--border);
+}
+.size-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+
+.applied { border-top: 1px solid var(--border); padding-top: var(--s-3); }
+.applied-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 168px; overflow-y: auto;
+}
+.applied-list li {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 5px var(--s-2); border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: var(--fs-sm);
+}
+.applied-step {
+  flex: none; width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.applied-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.applied-drop {
+  border: 0; background: none; color: var(--text-muted);
+  font-size: var(--fs-md); line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.applied-drop:hover { color: var(--danger); }
+
+/* The canvas ground shows transparency, so a cut-out reads as cut out. */
+.editor-viewport {
+  background:
+    linear-gradient(45deg, var(--inset) 25%, transparent 25%, transparent 75%, var(--inset) 75%) 0 0 / 18px 18px,
+    linear-gradient(45deg, var(--inset) 25%, transparent 25%, transparent 75%, var(--inset) 75%) 9px 9px / 18px 18px,
+    var(--surface);
 }

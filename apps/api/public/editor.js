@@ -1,13 +1,15 @@
 // Photo editor.
 //
-// The browser previews edits with CSS filters and an SVG overlay; it never
-// decodes the full-resolution image. What it produces is a RECIPE — an ordered
-// list of operations the server replays at full size through the same
-// primitives the batch tools use. One implementation of each transform, and a
-// 60-megapixel TIFF never enters a canvas.
+// Two-stage model: Apply commits the current tool's change, Save writes the
+// file. An edit in progress can be abandoned without disturbing the rest.
 //
-// The overlay's viewBox is the image's own pixel dimensions, so the coordinates
-// drawn here are the same numbers the server will use.
+// The preview is a deterministic function of (original image, ops) — the same
+// list is replayed here through a canvas and on the server through sharp, in
+// the same order. Nothing accumulates incrementally, so removing an applied
+// change simply re-runs the remaining list and cannot drift out of step.
+//
+// The recipe is authoritative: the browser only ever previews at display
+// resolution, and the server renders the real thing at full size.
 'use strict'
 ;(function () {
   var form = document.querySelector('form[data-editor]')
@@ -15,63 +17,68 @@
 
   var input = form.querySelector('[data-file-input]')
   var stage = form.querySelector('[data-stage]')
-  var canvas = form.querySelector('[data-canvas]')
+  var canvasWrap = form.querySelector('[data-canvas]')
   var viewport = form.querySelector('[data-viewport]')
   var plate = form.querySelector('[data-plate]')
-  var img = form.querySelector('[data-preview]')
+  var preview = form.querySelector('[data-preview]')
   var overlay = form.querySelector('[data-overlay]')
   var cropBox = form.querySelector('[data-crop-box]')
   var cropLabel = form.querySelector('[data-crop-label]')
   var recipeField = form.querySelector('[data-recipe]')
   var summary = form.querySelector('[data-op-summary]')
+  var pendingNote = form.querySelector('[data-pending-note]')
   var hint = form.querySelector('[data-editor-hint]')
+  var applyBar = form.querySelector('[data-apply-bar]')
+  var appliedBox = form.querySelector('[data-applied]')
+  var appliedList = form.querySelector('[data-applied-list]')
   var formatSelect = form.querySelector('[data-format]')
 
-  var SVG_NS = 'http://www.w3.org/2000/svg'
+  /** Cap the preview canvas: nothing is gained from previewing at full size. */
+  var MAX_PREVIEW = 1400
 
-  function blank() {
-    return {
-      filter: 'none',
-      brightness: 1, contrast: 1, saturation: 1, blur: 0, sharpen: 0,
-      rotate: 0, flip: false, flop: false,
-      crop: null,
-      resize: { width: null, height: null, lock: true },
-      strokes: [], shapes: [], texts: [],
-      frame: { on: false, width: 0.04, color: '#ffffff' },
-      corners: { on: false, radius: 0.08 },
-    }
-  }
-
-  var state = blank()
-  var natural = { width: 0, height: 0 }
+  var source = null          // the original, as an Image
+  var applied = []           // committed ops, in order
+  var pending = null         // { tab, ... } being edited now
   var tab = 'adjust'
   var ratio = null
   var shapeKind = 'rect'
-  var zoom = 0        // 0 means fit
+  var zoom = 0
   var objectUrl = null
+  var canvas = document.createElement('canvas')
+  var ctx = canvas.getContext('2d')
 
-  /* ---------------- history ---------------- */
+  /* ---------------- helpers ---------------- */
 
-  var history = [JSON.stringify(state)]
-  var historyAt = 0
-
-  function commit() {
-    var snapshot = JSON.stringify(state)
-    if (snapshot === history[historyAt]) return
-    // A new action after undoing discards the redo branch, as users expect.
-    history = history.slice(0, historyAt + 1)
-    history.push(snapshot)
-    historyAt = history.length - 1
-    render()
+  function val(selector, fallback) {
+    var el = form.querySelector(selector)
+    if (!el) return fallback
+    return el.type === 'checkbox' ? el.checked : el.value
+  }
+  function num(selector, fallback) {
+    var v = Number(val(selector, fallback))
+    return isFinite(v) ? v : fallback
   }
 
-  function travel(delta) {
-    var next = historyAt + delta
-    if (next < 0 || next >= history.length) return
-    historyAt = next
-    state = JSON.parse(history[historyAt])
-    syncControls()
-    render()
+  var LABELS = {
+    rotate: function (o) { return 'Rotate ' + o.angle + '°' },
+    flip: function () { return 'Mirror vertically' },
+    flop: function () { return 'Mirror horizontally' },
+    crop: function (o) { return 'Crop ' + Math.round(o.width * 100) + '% × ' + Math.round(o.height * 100) + '%' },
+    resize: function (o) { return 'Resize to ' + (o.width || 'auto') + ' × ' + (o.height || 'auto') },
+    filter: function (o) { return 'Filter: ' + o.preset },
+    brightness: function (o) { return 'Brightness ' + o.value.toFixed(2) },
+    contrast: function (o) { return 'Contrast ' + o.value.toFixed(2) },
+    saturation: function (o) { return 'Saturation ' + o.value.toFixed(2) },
+    blur: function (o) { return 'Blur ' + o.sigma },
+    sharpen: function (o) { return 'Sharpen ' + o.sigma },
+    shape: function (o) { return 'Add ' + o.shape },
+    draw: function (o) { return 'Draw (' + o.points.length + ' points)' },
+    text: function (o) { return 'Text: "' + o.text.slice(0, 18) + '"' },
+    frame: function () { return 'Border' },
+    corners: function () { return 'Round corners' },
+  }
+  function label(op) {
+    return LABELS[op.op] ? LABELS[op.op](op) : op.op
   }
 
   /* ---------------- files ---------------- */
@@ -80,13 +87,28 @@
     if (!files || !files.length) return
     if (objectUrl) URL.revokeObjectURL(objectUrl)
     objectUrl = URL.createObjectURL(files[0])
-    img.src = objectUrl
-    canvas.hidden = false
-    stage.classList.add('has-files')
-    state = blank()
-    history = [JSON.stringify(state)]
-    historyAt = 0
-    syncControls()
+
+    var image = new Image()
+    image.onload = function () {
+      source = image
+      applied = []
+      pending = null
+      canvasWrap.hidden = false
+      stage.classList.add('has-files')
+      seedSizeFields()
+      render()
+    }
+    image.src = objectUrl
+  }
+
+  function seedSizeFields() {
+    if (!source) return
+    ;[['[data-resize="width"]', source.naturalWidth], ['[data-resize="height"]', source.naturalHeight]].forEach(
+      function (pair) {
+        var el = form.querySelector(pair[0])
+        if (el) el.placeholder = String(pair[1])
+      },
+    )
   }
 
   input.addEventListener('change', function () { loadFiles(input.files) })
@@ -104,90 +126,162 @@
     loadFiles(e.dataTransfer.files)
   })
 
-  img.addEventListener('load', function () {
-    natural = { width: img.naturalWidth, height: img.naturalHeight }
-    overlay.setAttribute('viewBox', '0 0 ' + natural.width + ' ' + natural.height)
-    var rw = form.querySelector('[data-resize="width"]')
-    var rh = form.querySelector('[data-resize="height"]')
-    if (rw && !rw.value) rw.placeholder = String(natural.width)
-    if (rh && !rh.value) rh.placeholder = String(natural.height)
-    render()
-  })
-
   /* ---------------- tabs ---------------- */
 
-  Array.prototype.forEach.call(form.querySelectorAll('[data-tab]'), function (button) {
-    button.addEventListener('click', function () {
-      tab = button.getAttribute('data-tab')
-      Array.prototype.forEach.call(form.querySelectorAll('[data-tab]'), function (b) {
-        var on = b === button
-        b.classList.toggle('is-active', on)
-        b.setAttribute('aria-selected', on ? 'true' : 'false')
-      })
-      Array.prototype.forEach.call(form.querySelectorAll('[data-pane]'), function (pane) {
-        pane.hidden = pane.getAttribute('data-pane') !== tab
-      })
-      viewport.setAttribute('data-mode', tab)
-      render()
+  function selectTab(next) {
+    // Switching tools abandons an unapplied edit rather than carrying it over.
+    pending = null
+    tab = next
+    Array.prototype.forEach.call(form.querySelectorAll('[data-tab]'), function (b) {
+      var on = b.getAttribute('data-tab') === tab
+      b.classList.toggle('is-active', on)
+      b.setAttribute('aria-selected', on ? 'true' : 'false')
     })
+    Array.prototype.forEach.call(form.querySelectorAll('[data-pane]'), function (pane) {
+      pane.hidden = pane.getAttribute('data-pane') !== tab
+    })
+    viewport.setAttribute('data-mode', tab)
+    resetToolControls()
+    render()
+  }
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-tab]'), function (button) {
+    button.addEventListener('click', function () { selectTab(button.getAttribute('data-tab')) })
   })
+
+  /** Return the active tool's controls to their neutral position. */
+  function resetToolControls() {
+    Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (c) {
+      c.value = c.getAttribute('data-adjust') === 'blur' || c.getAttribute('data-adjust') === 'sharpen' ? '0' : '1'
+    })
+    Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (b, i) {
+      b.classList.toggle('is-active', i === 0)
+    })
+    ;['[data-crop-field="width"]', '[data-crop-field="height"]',
+      '[data-resize="width"]', '[data-resize="height"]', '[data-text-input]'].forEach(function (sel) {
+      var el = form.querySelector(sel)
+      if (el) el.value = ''
+    })
+    var frameOn = form.querySelector('[data-frame="on"]')
+    if (frameOn) frameOn.checked = false
+    var cornersOn = form.querySelector('[data-corners="on"]')
+    if (cornersOn) cornersOn.checked = false
+  }
+
+  /* ---------------- pending edits, per tool ---------------- */
+
+  /** The ops the current tool would contribute if applied now. */
+  function pendingOps() {
+    if (!pending) return []
+
+    if (pending.tab === 'adjust') {
+      var ops = []
+      if (pending.filter && pending.filter !== 'none') ops.push({ op: 'filter', preset: pending.filter })
+      ;['brightness', 'contrast', 'saturation'].forEach(function (k) {
+        if (pending[k] !== undefined && pending[k] !== 1) ops.push({ op: k, value: pending[k] })
+      })
+      if (pending.blur) ops.push({ op: 'blur', sigma: pending.blur })
+      if (pending.sharpen) ops.push({ op: 'sharpen', sigma: pending.sharpen })
+      return ops
+    }
+    if (pending.tab === 'crop' && pending.rect && pending.rect.width > 0.02 && pending.rect.height > 0.02) {
+      return [{
+        op: 'crop',
+        x: +pending.rect.x.toFixed(4), y: +pending.rect.y.toFixed(4),
+        width: +pending.rect.width.toFixed(4), height: +pending.rect.height.toFixed(4),
+      }]
+    }
+    if (pending.tab === 'resize' && (pending.width || pending.height)) {
+      var resize = { op: 'resize' }
+      if (pending.width) resize.width = pending.width
+      if (pending.height) resize.height = pending.height
+      return [resize]
+    }
+    if (pending.tab === 'transform') return pending.ops || []
+    if (pending.tab === 'draw' && pending.stroke && pending.stroke.points.length > 1) {
+      return [{ op: 'draw', color: pending.stroke.color, width: pending.stroke.width, points: pending.stroke.points }]
+    }
+    if (pending.tab === 'shapes' && pending.shape) {
+      var sh = pending.shape
+      if (Math.abs(sh.width) < 0.01 && Math.abs(sh.height) < 0.01) return []
+      return [{ op: 'shape', shape: sh.shape, x: sh.x, y: sh.y, width: sh.width, height: sh.height, color: sh.color, fill: sh.fill }]
+    }
+    if (pending.tab === 'text' && pending.text) return [pending.text]
+    if (pending.tab === 'frame' && pending.frame) return [pending.frame]
+    if (pending.tab === 'corners' && pending.corners) return [pending.corners]
+    return []
+  }
+
+  function setPending(next) {
+    pending = next
+    render()
+  }
 
   /* ---------------- controls ---------------- */
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (control) {
     control.addEventListener('input', function () {
-      state[control.getAttribute('data-adjust')] = Number(control.value)
-      render()
+      var base = pending && pending.tab === 'adjust' ? pending : { tab: 'adjust', filter: 'none' }
+      base[control.getAttribute('data-adjust')] = Number(control.value)
+      setPending(base)
     })
-    control.addEventListener('change', commit)
   })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (button) {
     button.addEventListener('click', function () {
-      state.filter = button.getAttribute('data-preset')
+      var base = pending && pending.tab === 'adjust' ? pending : { tab: 'adjust' }
+      base.filter = button.getAttribute('data-preset')
       Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (b) {
         b.classList.toggle('is-active', b === button)
       })
-      commit()
+      setPending(base)
     })
   })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-op]'), function (button) {
     button.addEventListener('click', function () {
+      var base = pending && pending.tab === 'transform' ? pending : { tab: 'transform', ops: [] }
       var op = button.getAttribute('data-op')
-      if (op === 'rotate') {
-        state.rotate = (((state.rotate + Number(button.getAttribute('data-value'))) % 360) + 360) % 360
-        // A crop chosen against the previous orientation no longer applies.
-        state.crop = null
-      } else if (op === 'flip') {
-        state.flip = !state.flip
-      } else if (op === 'flop') {
-        state.flop = !state.flop
-      }
-      commit()
+      if (op === 'rotate') base.ops.push({ op: 'rotate', angle: Number(button.getAttribute('data-value')) })
+      else base.ops.push({ op: op })
+      setPending(base)
     })
   })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-resize]'), function (control) {
     control.addEventListener('input', function () {
       var key = control.getAttribute('data-resize')
+      var base = pending && pending.tab === 'resize' ? pending : { tab: 'resize', lock: true }
       if (key === 'lock') {
-        state.resize.lock = control.checked
+        base.lock = control.checked
       } else {
-        var value = control.value === '' ? null : Math.max(1, Math.round(Number(control.value)))
-        state.resize[key] = value
-        if (state.resize.lock && value && natural.width) {
-          // Mirror the other dimension so the shown numbers match the result.
+        var v = control.value === '' ? null : Math.max(1, Math.round(Number(control.value)))
+        base[key] = v
+        var dims = currentSize()
+        if (base.lock && v && dims.width) {
           var other = key === 'width' ? 'height' : 'width'
-          var scale = key === 'width' ? value / natural.width : value / natural.height
-          state.resize[other] = Math.max(1, Math.round((other === 'width' ? natural.width : natural.height) * scale))
+          var scale = key === 'width' ? v / dims.width : v / dims.height
+          base[other] = Math.max(1, Math.round((other === 'width' ? dims.width : dims.height) * scale))
           var mirror = form.querySelector('[data-resize="' + other + '"]')
-          if (mirror) mirror.value = String(state.resize[other])
+          if (mirror) mirror.value = String(base[other])
         }
       }
-      render()
+      setPending(base)
     })
-    control.addEventListener('change', commit)
+  })
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-crop-field]'), function (control) {
+    control.addEventListener('input', function () {
+      var dims = currentSize()
+      if (!dims.width) return
+      var base = pending && pending.tab === 'crop' ? pending : { tab: 'crop', rect: { x: 0, y: 0, width: 1, height: 1 } }
+      var key = control.getAttribute('data-crop-field')
+      var px = Math.max(1, Math.round(Number(control.value) || 0))
+      base.rect[key] = Math.min(1, px / (key === 'width' ? dims.width : dims.height))
+      base.rect.x = Math.min(base.rect.x, 1 - base.rect.width)
+      base.rect.y = Math.min(base.rect.y, 1 - base.rect.height)
+      setPending(base)
+    })
   })
 
   var ratios = form.querySelector('[data-ratios]')
@@ -198,13 +292,18 @@
       Array.prototype.forEach.call(ratios.querySelectorAll('[data-ratio]'), function (b) {
         b.classList.toggle('is-active', b === button)
       })
-      var value = button.getAttribute('data-ratio')
-      ratio = value === 'free' ? null : Number(value)
-      if (state.crop && ratio) {
-        state.crop.height = state.crop.width * (natural.width / natural.height) / ratio
-        commit()
+      var v = button.getAttribute('data-ratio')
+      ratio = v === 'free' ? null : Number(v)
+      if (ratio) {
+        var dims = currentSize()
+        var base = pending && pending.tab === 'crop' ? pending : { tab: 'crop', rect: { x: 0, y: 0, width: 1, height: 1 } }
+        // Fit the largest rectangle of this ratio inside the current image.
+        var w = 1
+        var h = (dims.width / ratio) / dims.height
+        if (h > 1) { h = 1; w = (dims.height * ratio) / dims.width }
+        base.rect = { x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h }
+        setPending(base)
       }
-      render()
     })
   }
 
@@ -222,62 +321,281 @@
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-frame]'), function (control) {
     control.addEventListener('input', function () {
-      var key = control.getAttribute('data-frame')
-      state.frame[key] = key === 'on' ? control.checked : (key === 'width' ? Number(control.value) : control.value)
-      render()
+      var on = val('[data-frame="on"]', false)
+      setPending(on ? {
+        tab: 'frame',
+        frame: { op: 'frame', width: num('[data-frame="width"]', 0.04), color: val('[data-frame="color"]', '#ffffff') },
+      } : { tab: 'frame' })
     })
-    control.addEventListener('change', commit)
   })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-corners]'), function (control) {
     control.addEventListener('input', function () {
-      var key = control.getAttribute('data-corners')
-      state.corners[key] = key === 'on' ? control.checked : Number(control.value)
-      // Transparency needs a format that can hold it.
-      if (state.corners.on && formatSelect && formatSelect.value === 'jpeg') formatSelect.value = 'png'
-      render()
+      var on = val('[data-corners="on"]', false)
+      if (on && formatSelect && formatSelect.value === 'jpeg') formatSelect.value = 'png'
+      setPending(on ? {
+        tab: 'corners',
+        corners: { op: 'corners', radius: num('[data-corners="radius"]', 0.08) },
+      } : { tab: 'corners' })
     })
-    control.addEventListener('change', commit)
   })
 
-  Array.prototype.forEach.call(form.querySelectorAll('[data-clear]'), function (button) {
+  Array.prototype.forEach.call(form.querySelectorAll('[data-pen], [data-text-size], [data-text-color], [data-shape-color], [data-shape-fill]'), function (c) {
+    c.addEventListener('input', render)
+  })
+
+  /* ---------------- apply / cancel ---------------- */
+
+  function applyPending() {
+    var ops = pendingOps()
+    if (!ops.length) return false
+    ops.forEach(function (op) { applied.push(op) })
+    pending = null
+    resetToolControls()
+    render()
+    return true
+  }
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-edit]'), function (button) {
     button.addEventListener('click', function () {
-      state[button.getAttribute('data-clear')] = []
-      commit()
+      if (button.getAttribute('data-edit') === 'apply') applyPending()
+      else {
+        pending = null
+        resetToolControls()
+        render()
+      }
     })
   })
-
-  var cropClear = form.querySelector('[data-crop-clear]')
-  if (cropClear) cropClear.addEventListener('click', function () { state.crop = null; commit() })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-history]'), function (button) {
     button.addEventListener('click', function () {
       var action = button.getAttribute('data-history')
-      if (action === 'undo') travel(-1)
-      else if (action === 'redo') travel(1)
-      else {
-        state = blank()
-        syncControls()
-        commit()
-      }
+      if (action === 'undo') applied.pop()
+      else if (action === 'reset') applied = []
+      pending = null
+      resetToolControls()
+      render()
     })
   })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-zoom]'), function (button) {
     button.addEventListener('click', function () {
-      var value = button.getAttribute('data-zoom')
-      if (value === 'fit') zoom = 0
-      else zoom = Math.min(400, Math.max(25, (zoom || 100) + Number(value) * 25))
+      var v = button.getAttribute('data-zoom')
+      zoom = v === 'fit' ? 0 : Math.min(400, Math.max(25, (zoom || 100) + Number(v) * 25))
       render()
     })
   })
+
+  // Nothing in progress is silently discarded when saving.
+  form.addEventListener('submit', function () {
+    applyPending()
+    recipeField.value = JSON.stringify({ version: 1, ops: applied })
+  })
+
+  /* ---------------- canvas replay ---------------- */
+
+  var CSS_FILTERS = {
+    mono: 'grayscale(1)', sepia: 'sepia(0.72)', vivid: 'saturate(1.4) contrast(1.08)',
+    warm: 'sepia(0.22) saturate(1.12)', cool: 'saturate(1.06) hue-rotate(12deg)',
+    fade: 'saturate(0.68) brightness(1.06) contrast(0.92)',
+  }
+
+  /**
+   * Replay ops into the canvas, in order, exactly as the server will.
+   *
+   * Geometry ops re-target the canvas; pixel ops use ctx.filter; annotations
+   * draw with Canvas2D. `sharpen` has no canvas equivalent and is skipped here
+   * — it still applies server-side, so a preview slightly understates it.
+   */
+  function replay(ops) {
+    if (!source) return
+
+    var scale = Math.min(1, MAX_PREVIEW / Math.max(source.naturalWidth, source.naturalHeight))
+    canvas.width = Math.max(1, Math.round(source.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(source.naturalHeight * scale))
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+
+    ops.forEach(function (op) {
+      var w = canvas.width
+      var h = canvas.height
+      var short = Math.min(w, h)
+
+      if (op.op === 'rotate' || op.op === 'flip' || op.op === 'flop' || op.op === 'crop' || op.op === 'resize') {
+        var snapshot = document.createElement('canvas')
+        snapshot.width = w
+        snapshot.height = h
+        snapshot.getContext('2d').drawImage(canvas, 0, 0)
+
+        if (op.op === 'crop') {
+          var cw = Math.max(1, Math.round(op.width * w))
+          var ch = Math.max(1, Math.round(op.height * h))
+          canvas.width = cw
+          canvas.height = ch
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, cw, ch)
+          ctx.drawImage(snapshot, Math.round(op.x * w), Math.round(op.y * h), cw, ch, 0, 0, cw, ch)
+        } else if (op.op === 'resize') {
+          var target = fitInside(w, h, op.width, op.height)
+          canvas.width = target.width
+          canvas.height = target.height
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, target.width, target.height)
+          ctx.drawImage(snapshot, 0, 0, target.width, target.height)
+        } else if (op.op === 'rotate') {
+          var quarter = Math.abs(((op.angle % 360) + 360) % 360)
+          var swap = quarter === 90 || quarter === 270
+          canvas.width = swap ? h : w
+          canvas.height = swap ? w : h
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+          ctx.translate(canvas.width / 2, canvas.height / 2)
+          ctx.rotate((quarter * Math.PI) / 180)
+          ctx.drawImage(snapshot, -w / 2, -h / 2)
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+        } else {
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, w, h)
+          ctx.translate(op.op === 'flop' ? w : 0, op.op === 'flip' ? h : 0)
+          ctx.scale(op.op === 'flop' ? -1 : 1, op.op === 'flip' ? -1 : 1)
+          ctx.drawImage(snapshot, 0, 0)
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+        }
+        return
+      }
+
+      if (op.op === 'filter' || op.op === 'brightness' || op.op === 'contrast' || op.op === 'saturation' || op.op === 'blur') {
+        var filter =
+          op.op === 'filter' ? CSS_FILTERS[op.preset] || '' :
+          op.op === 'brightness' ? 'brightness(' + op.value + ')' :
+          op.op === 'contrast' ? 'contrast(' + op.value + ')' :
+          op.op === 'saturation' ? 'saturate(' + op.value + ')' :
+          'blur(' + (op.sigma * (canvas.width / (source.naturalWidth || canvas.width))).toFixed(2) + 'px)'
+        if (!filter) return
+
+        var pass = document.createElement('canvas')
+        pass.width = w
+        pass.height = h
+        var pctx = pass.getContext('2d')
+        pctx.filter = filter
+        pctx.drawImage(canvas, 0, 0)
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, w, h)
+        ctx.drawImage(pass, 0, 0)
+        return
+      }
+
+      if (op.op === 'shape') {
+        ctx.save()
+        ctx.strokeStyle = op.color
+        ctx.fillStyle = op.color
+        ctx.lineWidth = Math.max(1, 0.008 * short)
+        ctx.lineCap = 'round'
+        if (op.shape === 'line') {
+          ctx.beginPath()
+          ctx.moveTo(op.x * w, op.y * h)
+          ctx.lineTo((op.x + op.width) * w, (op.y + op.height) * h)
+          ctx.stroke()
+        } else if (op.shape === 'ellipse') {
+          ctx.beginPath()
+          ctx.ellipse((op.x + op.width / 2) * w, (op.y + op.height / 2) * h, (op.width / 2) * w, (op.height / 2) * h, 0, 0, Math.PI * 2)
+          if (op.fill) ctx.fill()
+          else ctx.stroke()
+        } else {
+          if (op.fill) ctx.fillRect(op.x * w, op.y * h, op.width * w, op.height * h)
+          else ctx.strokeRect(op.x * w, op.y * h, op.width * w, op.height * h)
+        }
+        ctx.restore()
+        return
+      }
+
+      if (op.op === 'draw') {
+        ctx.save()
+        ctx.strokeStyle = op.color
+        ctx.lineWidth = Math.max(1, op.width * short)
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.beginPath()
+        op.points.forEach(function (p, i) {
+          if (i === 0) ctx.moveTo(p.x * w, p.y * h)
+          else ctx.lineTo(p.x * w, p.y * h)
+        })
+        ctx.stroke()
+        ctx.restore()
+        return
+      }
+
+      if (op.op === 'text') {
+        ctx.save()
+        ctx.fillStyle = op.color
+        ctx.font = '700 ' + Math.max(8, op.size * short) + 'px "DejaVu Sans", Helvetica, Arial, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(op.text, op.x * w, op.y * h)
+        ctx.restore()
+        return
+      }
+
+      if (op.op === 'frame') {
+        var thickness = Math.max(1, op.width * short)
+        ctx.save()
+        ctx.strokeStyle = op.color
+        ctx.lineWidth = thickness
+        ctx.strokeRect(thickness / 2, thickness / 2, w - thickness, h - thickness)
+        ctx.restore()
+        return
+      }
+
+      if (op.op === 'corners') {
+        var radius = Math.min(op.radius * short, Math.min(w, h) / 2)
+        var masked = document.createElement('canvas')
+        masked.width = w
+        masked.height = h
+        var mctx = masked.getContext('2d')
+        mctx.beginPath()
+        if (mctx.roundRect) mctx.roundRect(0, 0, w, h, radius)
+        else mctx.rect(0, 0, w, h)
+        mctx.clip()
+        mctx.drawImage(canvas, 0, 0)
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, w, h)
+        ctx.drawImage(masked, 0, 0)
+      }
+    })
+  }
+
+  function fitInside(w, h, targetW, targetH) {
+    if (targetW && targetH) {
+      var s = Math.min(targetW / w, targetH / h)
+      return { width: Math.max(1, Math.round(w * s)), height: Math.max(1, Math.round(h * s)) }
+    }
+    if (targetW) return { width: targetW, height: Math.max(1, Math.round((h * targetW) / w)) }
+    return { width: Math.max(1, Math.round((w * targetH) / h)), height: targetH }
+  }
+
+  /** Dimensions of the image as the applied ops leave it, in source pixels. */
+  function currentSize() {
+    if (!source) return { width: 0, height: 0 }
+    var w = source.naturalWidth
+    var h = source.naturalHeight
+    applied.forEach(function (op) {
+      if (op.op === 'crop') { w = Math.round(op.width * w); h = Math.round(op.height * h) }
+      else if (op.op === 'resize') { var f = fitInside(w, h, op.width, op.height); w = f.width; h = f.height }
+      else if (op.op === 'rotate') {
+        var q = Math.abs(((op.angle % 360) + 360) % 360)
+        if (q === 90 || q === 270) { var t = w; w = h; h = t }
+      }
+    })
+    return { width: w, height: h }
+  }
 
   /* ---------------- canvas interaction ---------------- */
 
   var drag = null
 
   function pointAt(event) {
-    var box = img.getBoundingClientRect()
+    var box = preview.getBoundingClientRect()
     if (!box.width || !box.height) return null
     return {
       x: Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)),
@@ -286,53 +604,44 @@
   }
 
   plate.addEventListener('pointerdown', function (event) {
-    if (!natural.width) return
+    if (!source) return
     var at = pointAt(event)
     if (!at) return
 
     if (tab === 'text') {
-      var field = form.querySelector('[data-text-input]')
-      var text = field ? field.value.trim() : ''
+      var text = String(val('[data-text-input]', '')).trim()
       if (!text) {
         if (hint) hint.textContent = 'Type some text in the panel first, then click the image.'
         return
       }
-      state.texts.push({
-        text: text,
-        x: at.x,
-        y: at.y,
-        size: Number((form.querySelector('[data-text-size]') || {}).value || 0.1),
-        color: (form.querySelector('[data-text-color]') || {}).value || '#ffffff',
+      setPending({
+        tab: 'text',
+        text: {
+          op: 'text', text: text, x: +at.x.toFixed(4), y: +at.y.toFixed(4),
+          size: num('[data-text-size]', 0.1), color: val('[data-text-color]', '#ffffff'),
+        },
       })
-      commit()
       return
     }
 
     if (tab === 'draw') {
-      drag = {
-        mode: 'draw',
-        stroke: {
-          points: [at],
-          color: (form.querySelector('[data-pen="color"]') || {}).value || '#ff3b30',
-          width: Number((form.querySelector('[data-pen="width"]') || {}).value || 0.012),
-        },
+      drag = { mode: 'draw' }
+      pending = {
+        tab: 'draw',
+        stroke: { points: [at], color: val('[data-pen="color"]', '#ff3b30'), width: num('[data-pen="width"]', 0.012) },
       }
-      state.strokes.push(drag.stroke)
     } else if (tab === 'shapes') {
-      drag = {
-        mode: 'shape',
-        start: at,
+      drag = { mode: 'shape', start: at }
+      pending = {
+        tab: 'shapes',
         shape: {
-          shape: shapeKind,
-          x: at.x, y: at.y, width: 0, height: 0,
-          color: (form.querySelector('[data-shape-color]') || {}).value || '#ff3b30',
-          fill: !!(form.querySelector('[data-shape-fill]') || {}).checked,
+          shape: shapeKind, x: at.x, y: at.y, width: 0, height: 0,
+          color: val('[data-shape-color]', '#ff3b30'), fill: !!val('[data-shape-fill]', true),
         },
       }
-      state.shapes.push(drag.shape)
     } else if (tab === 'crop') {
       drag = { mode: 'crop', start: at }
-      state.crop = { x: at.x, y: at.y, width: 0, height: 0 }
+      pending = { tab: 'crop', rect: { x: at.x, y: at.y, width: 0, height: 0 } }
     } else {
       return
     }
@@ -343,295 +652,160 @@
   })
 
   plate.addEventListener('pointermove', function (event) {
-    if (!drag) return
+    if (!drag || !pending) return
     var at = pointAt(event)
     if (!at) return
 
     if (drag.mode === 'draw') {
-      // Sample sparsely: a stroke does not need every pointer event, and the
-      // recipe has a point budget.
-      var last = drag.stroke.points[drag.stroke.points.length - 1]
-      if (Math.abs(at.x - last.x) + Math.abs(at.y - last.y) > 0.004) drag.stroke.points.push(at)
+      var pts = pending.stroke.points
+      var last = pts[pts.length - 1]
+      if (Math.abs(at.x - last.x) + Math.abs(at.y - last.y) > 0.004) pts.push(at)
     } else if (drag.mode === 'shape') {
-      if (drag.shape.shape === 'line') {
-        drag.shape.width = at.x - drag.start.x
-        drag.shape.height = at.y - drag.start.y
+      var sh = pending.shape
+      if (sh.shape === 'line') {
+        sh.width = at.x - drag.start.x
+        sh.height = at.y - drag.start.y
       } else {
-        drag.shape.x = Math.min(drag.start.x, at.x)
-        drag.shape.y = Math.min(drag.start.y, at.y)
-        drag.shape.width = Math.abs(at.x - drag.start.x)
-        drag.shape.height = Math.abs(at.y - drag.start.y)
+        sh.x = Math.min(drag.start.x, at.x)
+        sh.y = Math.min(drag.start.y, at.y)
+        sh.width = Math.abs(at.x - drag.start.x)
+        sh.height = Math.abs(at.y - drag.start.y)
       }
     } else if (drag.mode === 'crop') {
-      state.crop.x = Math.min(drag.start.x, at.x)
-      state.crop.y = Math.min(drag.start.y, at.y)
-      state.crop.width = Math.abs(at.x - drag.start.x)
-      state.crop.height = Math.abs(at.y - drag.start.y)
-      if (ratio && natural.width) {
-        state.crop.height = (state.crop.width * natural.width) / (ratio * natural.height)
+      var r = pending.rect
+      r.x = Math.min(drag.start.x, at.x)
+      r.y = Math.min(drag.start.y, at.y)
+      r.width = Math.abs(at.x - drag.start.x)
+      r.height = Math.abs(at.y - drag.start.y)
+      if (ratio) {
+        var dims = currentSize()
+        r.height = (r.width * dims.width) / (ratio * dims.height)
       }
     }
     render()
   })
 
   plate.addEventListener('pointerup', function () {
-    if (!drag) return
-    // Discard a click that produced nothing meaningful.
-    if (drag.mode === 'shape' && Math.abs(drag.shape.width) < 0.01 && Math.abs(drag.shape.height) < 0.01) {
-      state.shapes.pop()
-    }
-    if (drag.mode === 'draw' && drag.stroke.points.length < 2) state.strokes.pop()
-    if (drag.mode === 'crop' && (state.crop.width < 0.02 || state.crop.height < 0.02)) state.crop = null
     drag = null
-    commit()
+    render()
   })
 
-  /* ---------------- preview ---------------- */
-
-  var CSS_FILTERS = {
-    none: '',
-    mono: 'grayscale(1)',
-    sepia: 'sepia(0.72)',
-    vivid: 'saturate(1.4) contrast(1.08)',
-    warm: 'sepia(0.22) saturate(1.12)',
-    cool: 'saturate(1.06) hue-rotate(12deg)',
-    fade: 'saturate(0.68) brightness(1.06) contrast(0.92)',
-  }
-
-  function cssFilter() {
-    var parts = []
-    if (state.filter && CSS_FILTERS[state.filter]) parts.push(CSS_FILTERS[state.filter])
-    if (state.brightness !== 1) parts.push('brightness(' + state.brightness + ')')
-    if (state.contrast !== 1) parts.push('contrast(' + state.contrast + ')')
-    if (state.saturation !== 1) parts.push('saturate(' + state.saturation + ')')
-    if (state.blur > 0) {
-      // The preview is smaller than the original, so a radius in source pixels
-      // has to be scaled to look the same here.
-      var shown = img.getBoundingClientRect().width || 1
-      parts.push('blur(' + (state.blur * (shown / (natural.width || shown))).toFixed(2) + 'px)')
-    }
-    return parts.join(' ')
-  }
-
-  function cssTransform() {
-    var parts = []
-    if (state.rotate) parts.push('rotate(' + state.rotate + 'deg)')
-    if (state.flop) parts.push('scaleX(-1)')
-    if (state.flip) parts.push('scaleY(-1)')
-    if (Math.abs(state.rotate % 180) === 90 && natural.width) {
-      var r = Math.min(natural.width, natural.height) / Math.max(natural.width, natural.height)
-      parts.push('scale(' + r.toFixed(3) + ')')
-    }
-    return parts.join(' ')
-  }
-
-  function node(name, attrs) {
-    var el = document.createElementNS(SVG_NS, name)
-    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, String(attrs[k])) })
-    return el
-  }
-
-  /** Draw the overlay in the image's own pixel space, as the server will. */
-  function renderOverlay() {
-    overlay.innerHTML = ''
-    if (!natural.width) return
-    var w = natural.width
-    var h = natural.height
-    var short = Math.min(w, h)
-
-    state.shapes.forEach(function (s) {
-      var stroke = Math.max(1, 0.008 * short)
-      if (s.shape === 'line') {
-        overlay.appendChild(node('line', {
-          x1: s.x * w, y1: s.y * h, x2: (s.x + s.width) * w, y2: (s.y + s.height) * h,
-          stroke: s.color, 'stroke-width': stroke, 'stroke-linecap': 'round',
-        }))
-      } else if (s.shape === 'ellipse') {
-        overlay.appendChild(node('ellipse', {
-          cx: (s.x + s.width / 2) * w, cy: (s.y + s.height / 2) * h,
-          rx: (s.width / 2) * w, ry: (s.height / 2) * h,
-          fill: s.fill ? s.color : 'none',
-          stroke: s.fill ? 'none' : s.color, 'stroke-width': stroke,
-        }))
-      } else {
-        overlay.appendChild(node('rect', {
-          x: s.x * w, y: s.y * h, width: s.width * w, height: s.height * h,
-          fill: s.fill ? s.color : 'none',
-          stroke: s.fill ? 'none' : s.color, 'stroke-width': stroke,
-        }))
-      }
-    })
-
-    state.strokes.forEach(function (s) {
-      var d = s.points.map(function (p, i) {
-        return (i === 0 ? 'M' : 'L') + p.x * w + ',' + p.y * h
-      }).join(' ')
-      overlay.appendChild(node('path', {
-        d: d, fill: 'none', stroke: s.color,
-        'stroke-width': Math.max(1, s.width * short),
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-      }))
-    })
-
-    state.texts.forEach(function (t) {
-      var el = node('text', {
-        x: t.x * w, y: t.y * h, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
-        'font-size': Math.max(8, t.size * short), 'font-weight': 700, fill: t.color,
-        'font-family': 'DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif',
-      })
-      el.textContent = t.text
-      overlay.appendChild(el)
-    })
-
-    if (state.frame.on) {
-      var thickness = Math.max(1, state.frame.width * short)
-      overlay.appendChild(node('rect', {
-        x: thickness / 2, y: thickness / 2, width: w - thickness, height: h - thickness,
-        fill: 'none', stroke: state.frame.color, 'stroke-width': thickness,
-      }))
-    }
-  }
+  /* ---------------- render ---------------- */
 
   function renderCropBox() {
-    if (!state.crop || !natural.width) {
+    var rect = pending && pending.tab === 'crop' ? pending.rect : null
+    if (!rect || !rect.width) {
       cropBox.hidden = true
       return
     }
-    var box = img.getBoundingClientRect()
+    var box = preview.getBoundingClientRect()
     var plateBox = plate.getBoundingClientRect()
+    var dims = currentSize()
     cropBox.hidden = false
-    cropBox.style.left = box.left - plateBox.left + state.crop.x * box.width + 'px'
-    cropBox.style.top = box.top - plateBox.top + state.crop.y * box.height + 'px'
-    cropBox.style.width = state.crop.width * box.width + 'px'
-    cropBox.style.height = state.crop.height * box.height + 'px'
-    cropLabel.textContent =
-      Math.round(state.crop.width * natural.width) + ' × ' + Math.round(state.crop.height * natural.height)
+    cropBox.style.left = box.left - plateBox.left + rect.x * box.width + 'px'
+    cropBox.style.top = box.top - plateBox.top + rect.y * box.height + 'px'
+    cropBox.style.width = rect.width * box.width + 'px'
+    cropBox.style.height = rect.height * box.height + 'px'
+    cropLabel.textContent = Math.round(rect.width * dims.width) + ' × ' + Math.round(rect.height * dims.height)
+
+    // Keep the numeric fields in step with the drag.
+    var wf = form.querySelector('[data-crop-field="width"]')
+    var hf = form.querySelector('[data-crop-field="height"]')
+    if (wf && document.activeElement !== wf) wf.value = String(Math.round(rect.width * dims.width))
+    if (hf && document.activeElement !== hf) hf.value = String(Math.round(rect.height * dims.height))
   }
 
-  /** Fixed, deliberate order — not the order the user happened to click in. */
-  function buildRecipe() {
-    var ops = []
-    if (state.rotate) ops.push({ op: 'rotate', angle: state.rotate })
-    if (state.flop) ops.push({ op: 'flop' })
-    if (state.flip) ops.push({ op: 'flip' })
-    if (state.crop && state.crop.width > 0.02 && state.crop.height > 0.02) {
-      ops.push({
-        op: 'crop',
-        x: +state.crop.x.toFixed(4), y: +state.crop.y.toFixed(4),
-        width: +state.crop.width.toFixed(4), height: +state.crop.height.toFixed(4),
+  function renderAppliedList() {
+    appliedBox.hidden = applied.length === 0
+    appliedList.innerHTML = ''
+    applied.forEach(function (op, index) {
+      var li = document.createElement('li')
+
+      var step = document.createElement('span')
+      step.className = 'applied-step'
+      step.textContent = String(index + 1)
+
+      var name = document.createElement('span')
+      name.className = 'applied-name'
+      name.textContent = label(op)
+
+      var drop = document.createElement('button')
+      drop.type = 'button'
+      drop.className = 'applied-drop'
+      drop.textContent = '×'
+      drop.title = 'Remove this change'
+      drop.setAttribute('aria-label', 'Remove ' + label(op))
+      drop.addEventListener('click', function () {
+        // The preview is a function of the list, so dropping one entry and
+        // re-running is all that is needed.
+        applied.splice(index, 1)
+        render()
       })
-    }
-    if (state.resize.width || state.resize.height) {
-      var resize = { op: 'resize' }
-      if (state.resize.width) resize.width = state.resize.width
-      if (state.resize.height) resize.height = state.resize.height
-      ops.push(resize)
-    }
-    if (state.filter && state.filter !== 'none') ops.push({ op: 'filter', preset: state.filter })
-    if (state.brightness !== 1) ops.push({ op: 'brightness', value: state.brightness })
-    if (state.contrast !== 1) ops.push({ op: 'contrast', value: state.contrast })
-    if (state.saturation !== 1) ops.push({ op: 'saturation', value: state.saturation })
-    if (state.blur > 0) ops.push({ op: 'blur', sigma: state.blur })
-    if (state.sharpen > 0) ops.push({ op: 'sharpen', sigma: state.sharpen })
 
-    // Annotation sits above the adjustments so it is not washed out by them.
-    state.shapes.forEach(function (s) {
-      if (Math.abs(s.width) < 0.005 && Math.abs(s.height) < 0.005) return
-      ops.push({
-        op: 'shape', shape: s.shape,
-        x: +s.x.toFixed(4), y: +s.y.toFixed(4),
-        width: +s.width.toFixed(4), height: +s.height.toFixed(4),
-        color: s.color, fill: s.fill,
-      })
+      li.appendChild(step)
+      li.appendChild(name)
+      li.appendChild(drop)
+      appliedList.appendChild(li)
     })
-    state.strokes.forEach(function (s) {
-      if (s.points.length < 2) return
-      ops.push({
-        op: 'draw', color: s.color, width: s.width,
-        points: s.points.map(function (p) { return { x: +p.x.toFixed(4), y: +p.y.toFixed(4) } }),
-      })
-    })
-    state.texts.forEach(function (t) {
-      ops.push({ op: 'text', text: t.text, x: +t.x.toFixed(4), y: +t.y.toFixed(4), size: t.size, color: t.color })
-    })
-
-    // Frame and corners last: they trim the finished picture.
-    if (state.frame.on) ops.push({ op: 'frame', width: state.frame.width, color: state.frame.color })
-    if (state.corners.on) ops.push({ op: 'corners', radius: state.corners.radius })
-
-    return { version: 1, ops: ops }
-  }
-
-  /** Push state back into the controls, after undo or reset. */
-  function syncControls() {
-    Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (c) {
-      c.value = String(state[c.getAttribute('data-adjust')])
-    })
-    Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (b) {
-      b.classList.toggle('is-active', b.getAttribute('data-preset') === state.filter)
-    })
-    var frameOn = form.querySelector('[data-frame="on"]')
-    if (frameOn) frameOn.checked = state.frame.on
-    var cornersOn = form.querySelector('[data-corners="on"]')
-    if (cornersOn) cornersOn.checked = state.corners.on
-    var rw = form.querySelector('[data-resize="width"]')
-    var rh = form.querySelector('[data-resize="height"]')
-    if (rw) rw.value = state.resize.width ? String(state.resize.width) : ''
-    if (rh) rh.value = state.resize.height ? String(state.resize.height) : ''
   }
 
   function render() {
-    img.style.filter = cssFilter()
-    plate.style.transform = cssTransform()
+    if (!source) return
 
-    // Zoom scales the viewport contents; 0 means fit to the available space.
-    plate.style.width = zoom ? natural.width * (zoom / 100) + 'px' : ''
+    var provisional = pendingOps()
+    replay(applied.concat(provisional))
+    preview.src = canvas.toDataURL('image/png')
+
+    plate.style.width = zoom ? canvas.width * (zoom / 100) + 'px' : ''
     plate.style.maxWidth = zoom ? 'none' : '100%'
     var zoomValue = form.querySelector('[data-zoom-value]')
     if (zoomValue) zoomValue.textContent = zoom ? zoom + '%' : 'Fit'
 
+    if (overlay) overlay.innerHTML = ''
+    renderCropBox()
+    renderAppliedList()
+
+    applyBar.hidden = provisional.length === 0
+    if (pendingNote) pendingNote.hidden = provisional.length === 0
+
     Array.prototype.forEach.call(form.querySelectorAll('[data-out]'), function (out) {
       var key = out.getAttribute('data-out')
-      if (key === 'pen') out.textContent = Number((form.querySelector('[data-pen="width"]') || {}).value || 0).toFixed(3)
-      else if (key === 'textSize') out.textContent = Number((form.querySelector('[data-text-size]') || {}).value || 0).toFixed(2)
-      else if (key === 'frameWidth') out.textContent = state.frame.width.toFixed(3)
-      else if (key === 'cornerRadius') out.textContent = state.corners.radius.toFixed(2)
-      else if (typeof state[key] === 'number') out.textContent = state[key].toFixed(key === 'blur' || key === 'sharpen' ? 1 : 2)
+      var map = {
+        pen: num('[data-pen="width"]', 0).toFixed(3),
+        textSize: num('[data-text-size]', 0).toFixed(2),
+        frameWidth: num('[data-frame="width"]', 0).toFixed(3),
+        cornerRadius: num('[data-corners="radius"]', 0).toFixed(2),
+      }
+      if (map[key] !== undefined) { out.textContent = map[key]; return }
+      var el = form.querySelector('[data-adjust="' + key + '"]')
+      if (el) out.textContent = Number(el.value).toFixed(key === 'blur' || key === 'sharpen' ? 1 : 2)
     })
 
-    renderOverlay()
-    renderCropBox()
+    recipeField.value = JSON.stringify({ version: 1, ops: applied.concat(provisional) })
 
-    var recipe = buildRecipe()
-    recipeField.value = JSON.stringify(recipe)
-
+    var dims = currentSize()
     if (summary) {
-      summary.textContent = recipe.ops.length
-        ? recipe.ops.length + ' change' + (recipe.ops.length === 1 ? '' : 's') + ' applied at full resolution'
+      summary.textContent = applied.length
+        ? applied.length + ' change' + (applied.length === 1 ? '' : 's') + ' applied · ' + dims.width + ' × ' + dims.height
         : 'No changes yet.'
     }
 
     var undo = form.querySelector('[data-history="undo"]')
+    if (undo) undo.disabled = applied.length === 0
     var redo = form.querySelector('[data-history="redo"]')
-    if (undo) undo.disabled = historyAt === 0
-    if (redo) redo.disabled = historyAt >= history.length - 1
+    if (redo) redo.disabled = true
 
     if (hint) {
       var hints = {
-        crop: 'Drag on the image to select an area.',
-        draw: 'Drag on the image to draw.',
-        shapes: 'Drag on the image to place a ' + shapeKind + '.',
+        crop: 'Drag on the image to select an area, then Apply.',
+        draw: 'Drag on the image to draw, then Apply.',
+        shapes: 'Drag on the image to place a ' + shapeKind + ', then Apply.',
         text: 'Type in the panel, then click the image to place it.',
       }
       hint.textContent = hints[tab] || ''
     }
   }
 
-  Array.prototype.forEach.call(form.querySelectorAll('[data-pen], [data-text-size], [data-text-color], [data-shape-color]'), function (c) {
-    c.addEventListener('input', render)
-  })
-
   viewport.setAttribute('data-mode', tab)
-  window.addEventListener('resize', render)
-  render()
+  window.addEventListener('resize', function () { renderCropBox() })
 })()

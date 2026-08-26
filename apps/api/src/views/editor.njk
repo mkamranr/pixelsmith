@@ -148,14 +148,26 @@
       </div>
 
       <div class="editor-pane" id="pane-crop" role="tabpanel" data-pane="crop" hidden>
+        <div class="size-pair">
+          <div class="field">
+            <label for="ed-cw">Width (px)</label>
+            <input type="number" id="ed-cw" min="1" data-crop-field="width">
+          </div>
+          <div class="field">
+            <label for="ed-ch">Height (px)</label>
+            <input type="number" id="ed-ch" min="1" data-crop-field="height">
+          </div>
+        </div>
         <span class="panel-label">Aspect ratio</span>
         <div class="ratio-row" data-ratios>
-          {% for r in [{v:'free',l:'Free'},{v:'1',l:'1:1'},{v:'1.7777',l:'16:9'},{v:'1.3333',l:'4:3'},{v:'0.8',l:'4:5'}] %}
+          {% for r in [
+            {v:'free',l:'Free'}, {v:'1',l:'1:1'}, {v:'1.5',l:'3:2'}, {v:'1.3333',l:'4:3'},
+            {v:'1.25',l:'5:4'}, {v:'1.7777',l:'16:9'}, {v:'0.8',l:'4:5'}, {v:'0.5625',l:'9:16'}
+          ] %}
             <button type="button" class="chip-btn{% if loop.first %} is-active{% endif %}" data-ratio="{{ r.v }}">{{ r.l }}</button>
           {% endfor %}
         </div>
-        <p class="hint">Drag on the image to select an area. Drag again to change it.</p>
-        <button type="button" class="btn btn-sm btn-block" data-crop-clear>Clear selection</button>
+        <p class="hint">Drag on the image to select an area, then apply.</p>
       </div>
 
       <div class="editor-pane" id="pane-transform" role="tabpanel" data-pane="transform" hidden>
@@ -242,6 +254,18 @@
         <p class="hint">Rounded corners are transparent, so the output is saved as PNG.</p>
       </div>
 
+      {# Apply commits the current tool's change; Save writes the file. Two
+         distinct steps, so an edit can be abandoned without losing the rest. #}
+      <div class="apply-bar" data-apply-bar hidden>
+        <button type="button" class="btn" data-edit="cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" data-edit="apply">Apply</button>
+      </div>
+
+      <div class="applied" data-applied hidden>
+        <span class="panel-label">Applied changes</span>
+        <ol class="applied-list" data-applied-list></ol>
+      </div>
+
       <div class="panel-footer">
         <div class="field">
           <label for="ed-format">Save as</label>
@@ -259,6 +283,7 @@
             <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
         </button>
         <p class="hint" data-op-summary>No changes yet.</p>
+        <p class="hint" data-pending-note hidden>An unapplied change will be applied when you save.</p>
       </div>
     </aside>
   </div>

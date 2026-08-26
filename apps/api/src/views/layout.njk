@@ -36,6 +36,7 @@
         </summary>
 
         <div class="menu-panel" role="group" aria-label="All tools">
+          <div class="menu-inner">
           {% for group in groups %}
             <section class="menu-group">
               <h2 class="menu-group-title">{{ group.label }}</h2>
@@ -51,6 +52,7 @@
               </ul>
             </section>
           {% endfor %}
+          </div>
         </div>
       </details>
 
