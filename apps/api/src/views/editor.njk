@@ -9,7 +9,7 @@
 
 {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
 
-{% if not user %}
+{% if not canUse %}
   <h1 class="page-title">{{ tool.title }}</h1>
   <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before editing images.</div>
 {% else %}
@@ -33,8 +33,10 @@
       { id: 'draw',      label: 'Draw',           icon: 'code' },
       { id: 'text',      label: 'Text',           icon: 'message-square' },
       { id: 'shapes',    label: 'Shapes',         icon: 'maximize' },
+      { id: 'stickers',  label: 'Stickers',       icon: 'stamp' },
       { id: 'frame',     label: 'Frame',          icon: 'file-image' },
-      { id: 'corners',   label: 'Corners',        icon: 'scissors' }
+      { id: 'corners',   label: 'Corners',        icon: 'scissors' },
+      { id: 'background',label: 'Background',     icon: 'archive' }
     ] %}
     {% for t in tabs %}
       <button type="button" class="editor-tab{% if loop.first %} is-active{% endif %}"
@@ -231,6 +233,26 @@
         <button type="button" class="btn btn-sm btn-block" data-clear="shapes">Remove all shapes</button>
       </div>
 
+      <div class="editor-pane" id="pane-stickers" role="tabpanel" data-pane="stickers" hidden>
+        <div class="ratio-row" data-sticker-cats></div>
+        <div class="sticker-grid" data-sticker-grid></div>
+        <div class="slider-row">
+          <label for="ed-stsize">Size</label>
+          <input type="range" id="ed-stsize" data-sticker-size min="0.05" max="1" step="0.05" value="0.25">
+          <output data-out="stickerSize">0.25</output>
+        </div>
+        <div class="slider-row">
+          <label for="ed-stcol">Colour</label>
+          <input type="color" id="ed-stcol" data-sticker-color value="#ff3b30">
+        </div>
+        <div class="slider-row">
+          <label for="ed-strot">Rotation</label>
+          <input type="range" id="ed-strot" data-sticker-rotation min="-180" max="180" step="15" value="0">
+          <output data-out="stickerRotation">0</output>
+        </div>
+        <p class="hint">Pick a mark, then click the image to place it.</p>
+      </div>
+
       <div class="editor-pane" id="pane-frame" role="tabpanel" data-pane="frame" hidden>
         <label class="check-row"><input type="checkbox" data-frame="on"> <span>Add a border</span></label>
         <div class="slider-row">
@@ -252,6 +274,18 @@
           <output data-out="cornerRadius">0.08</output>
         </div>
         <p class="hint">Rounded corners are transparent, so the output is saved as PNG.</p>
+      </div>
+
+      <div class="editor-pane" id="pane-background" role="tabpanel" data-pane="background" hidden>
+        <label class="check-row"><input type="checkbox" data-bg="on"> <span>Fill transparent areas</span></label>
+        <div class="slider-row">
+          <label for="ed-bgcol">Colour</label>
+          <input type="color" id="ed-bgcol" data-bg="color" value="#ffffff">
+        </div>
+        <p class="hint">
+          Useful after rounding the corners or removing a background, where the
+          result would otherwise be see-through.
+        </p>
       </div>
 
       {# Apply commits the current tool's change; Save writes the file. Two

@@ -11,8 +11,14 @@
     no API keys, no telemetry. Files are processed on this machine and deleted
     {{ retentionHours }} hour{% if retentionHours != 1 %}s{% endif %} later.
   </p>
-  {% if not user %}
+  {% if not canUse %}
     <p class="hero-actions"><a class="btn btn-primary btn-lg" href="/login">Sign in to get started</a></p>
+  {% elif openAccess %}
+    {# Nothing to sign into: send people straight at the work. #}
+    <p class="hero-actions">
+      <a class="btn btn-primary btn-lg" href="/tools/compress">Compress images</a>
+      <a class="btn btn-lg" href="/tools/resize">Resize images</a>
+    </p>
   {% endif %}
 </section>
 

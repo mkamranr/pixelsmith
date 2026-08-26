@@ -22,7 +22,10 @@ export function pageData(ctx: AppContext, req: FastifyRequest, reply: FastifyRep
   const tools = ctx.registry.list()
   return {
     user: req.currentUser ?? null,
-    isAdmin: req.currentUser?.role === 'admin',
+    /** Open access needs no sign-in, so the tools are always usable. */
+    openAccess: ctx.config.isOpenAccess,
+    canUse: ctx.config.isOpenAccess || Boolean(req.currentUser),
+    isAdmin: !ctx.config.isOpenAccess && req.currentUser?.role === 'admin',
     csrfToken: reply.generateCsrf(),
     groups: TOOL_GROUPS.map((g) => ({ ...g, tools: tools.filter((t) => t.ui.group === g.id) })).filter(
       (g) => g.tools.length > 0,

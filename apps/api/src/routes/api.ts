@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { STICKERS, STICKER_CATEGORIES } from '@pixelsmith/core'
 import type { AppContext } from '../context.js'
 import { NotFoundError } from '../errors.js'
 import { zodToFields } from '../schema-doc.js'
@@ -10,6 +11,17 @@ import { zodToFields } from '../schema-doc.js'
  */
 export async function registerApi(app: FastifyInstance, ctx: AppContext) {
   app.get('/healthz', async () => ({ status: 'ok', queue: ctx.queue.driver }))
+
+  /**
+   * The sticker catalogue. Served rather than duplicated into the client, so a
+   * preview cannot draw different geometry from the final render.
+   */
+  app.get('/api/stickers', async () => ({
+    categories: STICKER_CATEGORIES,
+    stickers: STICKERS.map((s) => ({
+      id: s.id, label: s.label, category: s.category, viewBox: s.viewBox, path: s.path,
+    })),
+  }))
 
   app.get('/api/tools', async () => ({
     tools: ctx.registry.list().map((t) => ({

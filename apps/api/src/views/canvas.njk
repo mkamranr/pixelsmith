@@ -9,7 +9,7 @@
 
 {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
 
-{% if not user %}
+{% if not canUse %}
   <h1 class="page-title">{{ tool.title }}</h1>
   <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before processing images.</div>
 {% else %}

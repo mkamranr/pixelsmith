@@ -15,6 +15,16 @@ const ConfigSchema = z.object({
   /** Everything mutable lives under here: the database and all job files. */
   DATA_DIR: z.string().default('./data'),
 
+  /**
+   * `open` (the default) needs no sign-in: anyone who can reach the host can
+   * use every tool. Each browser still gets an anonymous visitor cookie, purely
+   * so one person's uploads are not listed and downloadable by everyone else on
+   * the network — identity, not authentication.
+   *
+   * `accounts` restores per-user sign-in, an administrator, and the audit trail.
+   */
+  AUTH_MODE: z.enum(['open', 'accounts']).default('open'),
+
   /** Signs the session cookie. Required in production; generated in dev. */
   COOKIE_SECRET: z.string().min(32).optional(),
   SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
@@ -103,5 +113,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     sweepIntervalMs: raw.SWEEP_INTERVAL_MINUTES * 60 * 1000,
     allowedRenderHosts: raw.ALLOWED_RENDER_HOSTS.split(',').map((h) => h.trim()).filter(Boolean),
     isProduction: raw.NODE_ENV === 'production',
+    isOpenAccess: raw.AUTH_MODE === 'open',
   }
 }

@@ -6,6 +6,7 @@ import { BadInputError, LimitExceededError } from '../errors.js'
 import { deriveName, uniqueName } from '../naming.js'
 import { EXT_BY_FORMAT, MIME_BY_FORMAT, RASTER_MIMES } from '../pipeline.js'
 import { escapeXml, FONT_STACK } from '../text.js'
+import { stickerById, STICKER_IDS } from '../stickers.js'
 import type { Tool } from '../registry.js'
 
 /** A proportion of the image, so a preview-sized edit maps to any resolution. */
@@ -61,6 +62,20 @@ const EditOp = z.discriminatedUnion('op', [
     /** Border thickness as a fraction of the shorter side. */
     width: z.coerce.number().min(0.005).max(0.3).default(0.04),
     color: HEX.default('#ffffff'),
+  }),
+  z.object({
+    op: z.literal('sticker'),
+    sticker: z.enum(STICKER_IDS),
+    x: fraction,
+    y: fraction,
+    /** Width as a fraction of the image's shorter side. */
+    size: z.coerce.number().min(0.02).max(1.5),
+    color: HEX.default('#ff3b30'),
+    rotation: z.coerce.number().min(-180).max(180).default(0),
+  }),
+  z.object({
+    op: z.literal('background'),
+    color: HEX,
   }),
   z.object({
     op: z.literal('corners'),
@@ -253,6 +268,37 @@ async function applyOp(buffer: Buffer, op: EditOp): Promise<Buffer> {
         .composite([{ input: mask, blend: 'dest-in' }])
         .png()
         .toBuffer()
+    }
+
+    case 'sticker': {
+      const sticker = stickerById(op.sticker)
+      // The schema restricts the id to the catalogue, so this cannot normally
+      // happen; refusing loudly beats drawing nothing and looking successful.
+      if (!sticker) throw new BadInputError(`unknown sticker: ${op.sticker}`)
+
+      const extent = Math.max(8, Math.round(op.size * Math.min(width, height)))
+      const left = Math.round(op.x * width - extent / 2)
+      const top = Math.round(op.y * height - extent / 2)
+      const spin = op.rotation
+        ? ` transform="rotate(${op.rotation} ${extent / 2} ${extent / 2})"`
+        : ''
+
+      // Rendered at its final size rather than scaled afterwards, so the edges
+      // stay sharp however large the sticker is.
+      const mark = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${extent}" height="${extent}" viewBox="${sticker.viewBox}">` +
+          `<g${spin}><path d="${sticker.path}" fill="${op.color}" fill-rule="evenodd"/></g></svg>`,
+      )
+
+      return img
+        .composite([{ input: mark, top: Math.max(0, top), left: Math.max(0, left) }])
+        .toBuffer()
+    }
+
+    case 'background': {
+      // Flatten transparency onto a colour. Useful after rounding corners or
+      // removing a background, where the result would otherwise be see-through.
+      return img.flatten({ background: op.color }).toBuffer()
     }
 
     case 'filter': {

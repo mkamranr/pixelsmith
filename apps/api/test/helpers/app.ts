@@ -9,6 +9,10 @@ import { buildServer } from '../../src/server.js'
 /**
  * A complete server against a throwaway directory. Real routes, real database,
  * real cookies — only the port is absent, since inject() bypasses the socket.
+ *
+ * Accounts are enabled explicitly: open access is the product default, so a
+ * test that signs in has to ask for the mode where signing in exists.
+ * Open-access behaviour is covered by open-access.test.ts.
  */
 export async function testApp() {
   const dir = await mkdtemp(join(tmpdir(), 'pixelsmith-http-'))
@@ -18,6 +22,7 @@ export async function testApp() {
     COOKIE_SECRET: 'x'.repeat(48),
     QUEUE_DRIVER: 'inline',
     LOG_LEVEL: 'silent',
+    AUTH_MODE: 'accounts',
   } as NodeJS.ProcessEnv)
 
   const ctx = await createContext(config)

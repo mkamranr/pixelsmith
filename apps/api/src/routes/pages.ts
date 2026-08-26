@@ -17,48 +17,6 @@ const back = (path: string, message: string) => `${path}?error=${encodeURICompon
 export async function registerPages(app: FastifyInstance, ctx: AppContext) {
   app.get('/', async (req, reply) => reply.view('home.njk', pageData(ctx, req, reply)))
 
-  app.get('/login', async (req, reply) => {
-    if (req.currentUser) return reply.redirect('/')
-    const q = req.query as { error?: string; next?: string }
-    return reply.view('login.njk', pageData(ctx, req, reply, { error: q.error, next: q.next ?? '/' }))
-  })
-
-  app.post('/login', { preHandler: app.csrfProtection }, async (req, reply) => {
-    const body = req.body as { email?: string; password?: string; next?: string }
-    const next = body.next && body.next.startsWith('/') ? body.next : '/'
-
-    try {
-      const user = await ctx.users.authenticate(body.email ?? '', body.password ?? '')
-      const { token } = await ctx.sessions.createSession(user.id, {
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
-        ttlMs: ctx.config.sessionTtlMs,
-      })
-      await ctx.audit.record({ userId: user.id, action: 'login', ip: req.ip })
-
-      reply.setCookie('pixelsmith_session', token, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'strict',
-        signed: true,
-        secure: ctx.config.isProduction,
-        maxAge: Math.floor(ctx.config.sessionTtlMs / 1000),
-      })
-      return reply.redirect(next)
-    } catch (err) {
-      await ctx.audit.record({ action: 'login_failed', subject: body.email ?? null, ip: req.ip })
-      const message = err instanceof Error ? err.message : 'Sign in failed'
-      return reply.redirect(back('/login', message))
-    }
-  })
-
-  app.post('/logout', { preHandler: [app.requireUser, app.csrfProtection] }, async (req, reply) => {
-    if (req.sessionToken) await ctx.sessions.destroySession(req.sessionToken)
-    await ctx.audit.record({ userId: req.currentUser!.id, action: 'logout', ip: req.ip })
-    reply.clearCookie('pixelsmith_session', { path: '/' })
-    return reply.redirect('/')
-  })
-
   app.get('/tools/:toolId', async (req, reply) => {
     const { toolId } = req.params as { toolId: string }
     if (!ctx.registry.has(toolId)) throw new NotFoundError('Tool')
@@ -295,6 +253,56 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
       comparisons,
       isFinished: ['done', 'failed', 'expired', 'cancelled'].includes(job.status),
     }))
+  })
+
+}
+
+/**
+ * Pages that only make sense with accounts enabled: sign in, sign out and
+ * change password. In open-access mode they are never registered, so they 404
+ * rather than existing as dead ends.
+ */
+export async function registerAuthPages(app: FastifyInstance, ctx: AppContext) {
+  app.get('/login', async (req, reply) => {
+    if (req.currentUser) return reply.redirect('/')
+    const q = req.query as { error?: string; next?: string }
+    return reply.view('login.njk', pageData(ctx, req, reply, { error: q.error, next: q.next ?? '/' }))
+  })
+
+  app.post('/login', { preHandler: app.csrfProtection }, async (req, reply) => {
+    const body = req.body as { email?: string; password?: string; next?: string }
+    const next = body.next && body.next.startsWith('/') ? body.next : '/'
+
+    try {
+      const user = await ctx.users.authenticate(body.email ?? '', body.password ?? '')
+      const { token } = await ctx.sessions.createSession(user.id, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        ttlMs: ctx.config.sessionTtlMs,
+      })
+      await ctx.audit.record({ userId: user.id, action: 'login', ip: req.ip })
+
+      reply.setCookie('pixelsmith_session', token, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'strict',
+        signed: true,
+        secure: ctx.config.isProduction,
+        maxAge: Math.floor(ctx.config.sessionTtlMs / 1000),
+      })
+      return reply.redirect(next)
+    } catch (err) {
+      await ctx.audit.record({ action: 'login_failed', subject: body.email ?? null, ip: req.ip })
+      const message = err instanceof Error ? err.message : 'Sign in failed'
+      return reply.redirect(back('/login', message))
+    }
+  })
+
+  app.post('/logout', { preHandler: [app.requireUser, app.csrfProtection] }, async (req, reply) => {
+    if (req.sessionToken) await ctx.sessions.destroySession(req.sessionToken)
+    await ctx.audit.record({ userId: req.currentUser!.id, action: 'logout', ip: req.ip })
+    reply.clearCookie('pixelsmith_session', { path: '/' })
+    return reply.redirect('/')
   })
 
   app.get('/account', { preHandler: app.requireUser }, async (req, reply) => {

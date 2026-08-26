@@ -46,6 +46,11 @@
   var objectUrl = null
   var canvas = document.createElement('canvas')
   var ctx = canvas.getContext('2d')
+  var catalogue = { categories: [], stickers: [] }
+  var stickerChoice = null
+  var stickerCategory = null
+  /** Rasterised stickers, keyed by id and colour. */
+  var stickerCache = {}
 
   /* ---------------- helpers ---------------- */
 
@@ -76,6 +81,8 @@
     text: function (o) { return 'Text: "' + o.text.slice(0, 18) + '"' },
     frame: function () { return 'Border' },
     corners: function () { return 'Round corners' },
+    sticker: function (o) { return 'Sticker: ' + o.sticker },
+    background: function (o) { return 'Background ' + o.color },
   }
   function label(op) {
     return LABELS[op.op] ? LABELS[op.op](op) : op.op
@@ -125,6 +132,98 @@
     }
     loadFiles(e.dataTransfer.files)
   })
+
+  /* ---------------- stickers ---------------- */
+
+  /**
+   * The catalogue comes from the server, so the shape drawn in the preview is
+   * the same geometry the final render uses. Nothing is duplicated here.
+   */
+  function loadStickers() {
+    fetch('/api/stickers', { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!data) return
+        catalogue = data
+        stickerCategory = data.categories.length ? data.categories[0].id : null
+        renderStickerPicker()
+      })
+      .catch(function () {
+        // Without the catalogue the tab simply offers nothing; every other
+        // tool still works.
+      })
+  }
+
+  function svgFor(sticker, colour) {
+    return (
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + sticker.viewBox + '">' +
+      '<path d="' + sticker.path + '" fill="' + colour + '" fill-rule="evenodd"/></svg>'
+    )
+  }
+
+  /** A rasterised sticker for canvas drawing, loaded once per id and colour. */
+  function stickerImage(id, colour) {
+    var key = id + '|' + colour
+    if (stickerCache[key]) return stickerCache[key]
+
+    var sticker = catalogue.stickers.filter(function (s) { return s.id === id })[0]
+    if (!sticker) return null
+
+    var image = new Image()
+    image.onload = render
+    image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgFor(sticker, colour))
+    stickerCache[key] = image
+    return image
+  }
+
+  function renderStickerPicker() {
+    var cats = form.querySelector('[data-sticker-cats]')
+    var grid = form.querySelector('[data-sticker-grid]')
+    if (!cats || !grid) return
+
+    cats.innerHTML = ''
+    catalogue.categories.forEach(function (cat) {
+      var button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'chip-btn' + (cat.id === stickerCategory ? ' is-active' : '')
+      button.textContent = cat.label
+      button.addEventListener('click', function () {
+        stickerCategory = cat.id
+        renderStickerPicker()
+      })
+      cats.appendChild(button)
+    })
+
+    grid.innerHTML = ''
+    var colour = val('[data-sticker-color]', '#ff3b30')
+    catalogue.stickers
+      .filter(function (s) { return s.category === stickerCategory })
+      .forEach(function (sticker) {
+        var button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'sticker-btn' + (sticker.id === stickerChoice ? ' is-active' : '')
+        button.title = sticker.label
+        button.setAttribute('aria-label', sticker.label)
+        button.innerHTML = svgFor(sticker, 'currentColor')
+        button.addEventListener('click', function () {
+          stickerChoice = sticker.id
+          // Warm the raster before it is needed, so the first placement draws.
+          stickerImage(sticker.id, colour)
+          renderStickerPicker()
+        })
+        grid.appendChild(button)
+      })
+  }
+
+  Array.prototype.forEach.call(
+    form.querySelectorAll('[data-sticker-color], [data-sticker-size], [data-sticker-rotation]'),
+    function (control) {
+      control.addEventListener('input', function () {
+        if (control.hasAttribute('data-sticker-color')) renderStickerPicker()
+        render()
+      })
+    },
+  )
 
   /* ---------------- tabs ---------------- */
 
@@ -209,6 +308,8 @@
     if (pending.tab === 'text' && pending.text) return [pending.text]
     if (pending.tab === 'frame' && pending.frame) return [pending.frame]
     if (pending.tab === 'corners' && pending.corners) return [pending.corners]
+    if (pending.tab === 'stickers' && pending.sticker) return [pending.sticker]
+    if (pending.tab === 'background' && pending.background) return [pending.background]
     return []
   }
 
@@ -337,6 +438,13 @@
         tab: 'corners',
         corners: { op: 'corners', radius: num('[data-corners="radius"]', 0.08) },
       } : { tab: 'corners' })
+    })
+  })
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-bg]'), function (control) {
+    control.addEventListener('input', function () {
+      var on = val('[data-bg="on"]', false)
+      setPending(on ? { tab: 'background', background: { op: 'background', color: val('[data-bg="color"]', '#ffffff') } } : { tab: 'background' })
     })
   })
 
@@ -486,6 +594,34 @@
         return
       }
 
+      if (op.op === 'sticker') {
+        var mark = stickerImage(op.sticker, op.color)
+        // Skip until the raster is ready; its onload triggers another render.
+        if (!mark || !mark.complete || !mark.naturalWidth) return
+        var extent = Math.max(8, op.size * short)
+        ctx.save()
+        ctx.translate(op.x * w, op.y * h)
+        if (op.rotation) ctx.rotate((op.rotation * Math.PI) / 180)
+        ctx.drawImage(mark, -extent / 2, -extent / 2, extent, extent)
+        ctx.restore()
+        return
+      }
+
+      if (op.op === 'background') {
+        // Paint the colour underneath what is already there.
+        var under = document.createElement('canvas')
+        under.width = w
+        under.height = h
+        var uctx = under.getContext('2d')
+        uctx.fillStyle = op.color
+        uctx.fillRect(0, 0, w, h)
+        uctx.drawImage(canvas, 0, 0)
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, w, h)
+        ctx.drawImage(under, 0, 0)
+        return
+      }
+
       if (op.op === 'shape') {
         ctx.save()
         ctx.strokeStyle = op.color
@@ -619,6 +755,24 @@
         text: {
           op: 'text', text: text, x: +at.x.toFixed(4), y: +at.y.toFixed(4),
           size: num('[data-text-size]', 0.1), color: val('[data-text-color]', '#ffffff'),
+        },
+      })
+      return
+    }
+
+    if (tab === 'stickers') {
+      if (!stickerChoice) {
+        if (hint) hint.textContent = 'Choose a mark in the panel first, then click the image.'
+        return
+      }
+      setPending({
+        tab: 'stickers',
+        sticker: {
+          op: 'sticker', sticker: stickerChoice,
+          x: +at.x.toFixed(4), y: +at.y.toFixed(4),
+          size: num('[data-sticker-size]', 0.25),
+          color: val('[data-sticker-color]', '#ff3b30'),
+          rotation: num('[data-sticker-rotation]', 0),
         },
       })
       return
@@ -801,11 +955,13 @@
         draw: 'Drag on the image to draw, then Apply.',
         shapes: 'Drag on the image to place a ' + shapeKind + ', then Apply.',
         text: 'Type in the panel, then click the image to place it.',
+        stickers: 'Choose a mark, then click the image to place it.',
       }
       hint.textContent = hints[tab] || ''
     }
   }
 
+  loadStickers()
   viewport.setAttribute('data-mode', tab)
   window.addEventListener('resize', function () { renderCropBox() })
 })()

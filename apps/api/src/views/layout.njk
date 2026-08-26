@@ -56,7 +56,10 @@
         </div>
       </details>
 
-      {% if user %}
+      {% if openAccess %}
+        <a href="/jobs">My jobs</a>
+        <a href="/api/docs">API</a>
+      {% elif user %}
         <a href="/jobs">My jobs</a>
         {% if isAdmin %}<a href="/admin/users">Users</a>{% endif %}
         <a href="/api/docs">API</a>

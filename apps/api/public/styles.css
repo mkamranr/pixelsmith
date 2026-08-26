@@ -1248,3 +1248,22 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
     linear-gradient(45deg, var(--inset) 25%, transparent 25%, transparent 75%, var(--inset) 75%) 9px 9px / 18px 18px,
     var(--surface);
 }
+
+/* Several calls to action sit on one line and wrap together on narrow screens. */
+.hero-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+
+/* Sticker picker: a dense grid of marks, coloured to match the current choice. */
+.sticker-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-2);
+  max-height: 196px; overflow-y: auto; padding: 2px;
+}
+.sticker-btn {
+  aspect-ratio: 1; padding: 6px; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-muted);
+  display: grid; place-items: center;
+  transition: border-color 0.14s, background 0.14s, color 0.14s;
+}
+.sticker-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sticker-btn.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.sticker-btn svg { width: 100%; height: 100%; display: block; }

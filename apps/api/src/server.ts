@@ -15,7 +15,7 @@ import { authPlugin } from './plugins/auth.js'
 import { registerAdmin } from './routes/admin.js'
 import { registerApi } from './routes/api.js'
 import { registerFiles } from './routes/files.js'
-import { registerPages } from './routes/pages.js'
+import { registerAuthPages, registerPages } from './routes/pages.js'
 import { registerPreview } from './routes/preview.js'
 import { pageData } from './render.js'
 
@@ -99,7 +99,11 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
   await registerPreview(app, ctx)
   await registerPages(app, ctx)
   await registerFiles(app, ctx)
-  await registerAdmin(app, ctx)
+  // Nothing to sign into, and nothing to administer, without accounts.
+  if (!ctx.config.isOpenAccess) {
+    await registerAuthPages(app, ctx)
+    await registerAdmin(app, ctx)
+  }
 
   /**
    * One place that turns an error into a response. Deliberate errors show their
