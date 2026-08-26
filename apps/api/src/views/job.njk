@@ -1,0 +1,89 @@
+{% extends "layout.njk" %}
+{% import "_macros.njk" as m %}
+{% block title %}Job {{ job.id | truncate(8, true, "") }} — Pixelsmith{% endblock %}
+{% block content %}
+
+{# Without JavaScript the page still updates: a meta refresh keeps polling
+   while the job is unfinished, and stops once it is not. #}
+{% if not isFinished %}<meta http-equiv="refresh" content="3">{% endif %}
+
+<nav class="crumbs"><a href="/jobs">My jobs</a> <span aria-hidden="true">/</span> {{ job.id | truncate(8, true, "") }}</nav>
+
+<div class="job-head">
+  <h1 class="page-title">{{ tool.title if tool else job.toolId }}</h1>
+  {{ m.statusPill(job.status) }}
+</div>
+
+<div class="job-panel" data-job="{{ job.id }}" data-finished="{{ 'true' if isFinished else 'false' }}">
+  {% if job.status == 'queued' or job.status == 'running' %}
+    <p class="muted" data-job-label>
+      {{ 'Waiting for a worker…' if job.status == 'queued' else 'Working…' }}
+    </p>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ job.progress }}" data-progress>
+      <div class="progress-bar" style="width: {{ job.progress }}%"></div>
+    </div>
+    <noscript><p class="hint">This page refreshes every few seconds.</p></noscript>
+
+  {% elif job.status == 'failed' %}
+    <div class="alert alert-error">
+      <strong>This job failed.</strong>
+      <p>{{ job.errorMessage or 'No further detail was recorded.' }}</p>
+      {% if job.errorCode %}<p class="hint">Code: <code>{{ job.errorCode }}</code></p>{% endif %}
+    </div>
+    <a class="btn" href="/tools/{{ job.toolId }}">Try again</a>
+
+  {% elif job.status == 'expired' %}
+    <div class="alert">
+      These results have been deleted, as scheduled.
+      <a href="/tools/{{ job.toolId }}">Run it again</a>
+    </div>
+
+  {% else %}
+    <div class="job-done">
+      <p><strong>{{ outputs | length }}</strong> file{% if outputs | length != 1 %}s{% endif %} ready.</p>
+      {% if outputs | length > 1 %}
+        <a class="btn btn-primary" href="/jobs/{{ job.id }}/download">Download all as .zip</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+{% if outputs | length %}
+<h2 class="section-title">Results</h2>
+<ul class="result-grid">
+  {% for f in outputs %}
+  <li class="result">
+    <a class="result-preview" href="/jobs/{{ job.id }}/files/{{ f.id }}">
+      <img src="/jobs/{{ job.id }}/files/{{ f.id }}" alt="{{ f.name }}" loading="lazy">
+    </a>
+    <div class="result-meta">
+      <span class="result-name" title="{{ f.name }}">{{ f.name }}</span>
+      <span class="muted">{{ m.bytes(f.bytes) }}</span>
+    </div>
+    <a class="btn btn-quiet btn-sm" href="/jobs/{{ job.id }}/files/{{ f.id }}" download>Download</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if inputs | length %}
+<details class="inputs">
+  <summary>{{ inputs | length }} input file{% if inputs | length != 1 %}s{% endif %}</summary>
+  <ul class="plain-list">
+    {% for f in inputs %}<li>{{ f.name }} <span class="muted">{{ m.bytes(f.bytes) }}</span></li>{% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+{% if tool %}
+<section class="next-steps">
+  <h2 class="section-title">Do something else</h2>
+  <ul class="chip-row">
+    {% for group in groups %}{% for t in group.tools %}{% if t.id != job.toolId %}
+      <li><a class="chip" href="/tools/{{ t.id }}">{{ t.title }}</a></li>
+    {% endif %}{% endfor %}{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

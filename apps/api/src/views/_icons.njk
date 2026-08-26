@@ -1,0 +1,45 @@
+{# Inline SVG icons, drawn as a single stroke set so every tool card reads as
+   part of one family. Inline rather than a sprite file or an icon font: no
+   extra request, no external dependency, and it inherits currentColor. #}
+{% macro icon(name, size = 22) %}
+<svg class="icon" viewBox="0 0 24 24" width="{{ size }}" height="{{ size }}" fill="none"
+     stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
+     aria-hidden="true" focusable="false">
+{%- if name == 'archive' -%}
+  <path d="M3 7h18v3H3z"/><path d="M5 10v10h14V10"/><path d="M10 14h4"/>
+{%- elif name == 'scaling' -%}
+  <path d="M3 3h8v8H3z"/><path d="M14 14h7v7h-7z"/><path d="M11 11l6 6"/><path d="M17 11v6h-6"/>
+{%- elif name == 'crop' -%}
+  <path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>
+{%- elif name == 'rotate-cw' -%}
+  <path d="M21 3v6h-6"/><path d="M21 9a9 9 0 1 0-3 6.7"/>
+{%- elif name == 'sliders' -%}
+  <path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/>
+  <path d="M4 14h4"/><path d="M12 14h8"/><circle cx="10" cy="14" r="2"/>
+  <path d="M4 20h10"/><path d="M18 20h2"/><circle cx="16" cy="20" r="2"/>
+{%- elif name == 'file-image' -%}
+  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>
+  <circle cx="10" cy="12" r="1.4"/><path d="M17 19l-4-4-6 4"/>
+{%- elif name == 'maximize' -%}
+  <path d="M9 3H5a2 2 0 0 0-2 2v4"/><path d="M15 3h4a2 2 0 0 1 2 2v4"/>
+  <path d="M21 15v4a2 2 0 0 1-2 2h-4"/><path d="M3 15v4a2 2 0 0 0 2 2h4"/>
+  <path d="M9 12h6"/><path d="M12 9v6"/>
+{%- elif name == 'scissors' -%}
+  <circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/>
+  <path d="M20 4L8.6 15.4"/><path d="M14.5 14.5L20 20"/><path d="M8.6 8.6L12 12"/>
+{%- elif name == 'stamp' -%}
+  <path d="M5 21h14"/><path d="M7 17h10v-2a3 3 0 0 0-3-3h-4a3 3 0 0 0-3 3z"/>
+  <path d="M10 12V7a2 2 0 1 1 4 0v5"/>
+{%- elif name == 'user-x' -%}
+  <path d="M14 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="8" cy="7" r="3.4"/>
+  <path d="M17 6l5 5"/><path d="M22 6l-5 5"/>
+{%- elif name == 'message-square' -%}
+  <path d="M20 14a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/>
+  <path d="M8 8h8"/><path d="M8 11h5"/>
+{%- elif name == 'code' -%}
+  <path d="M9 17l-5-5 5-5"/><path d="M15 7l5 5-5 5"/>
+{%- else -%}
+  <circle cx="12" cy="12" r="9"/>
+{%- endif -%}
+</svg>
+{% endmacro %}

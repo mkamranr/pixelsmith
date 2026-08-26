@@ -1,0 +1,28 @@
+{% extends "layout.njk" %}
+{% import "_macros.njk" as m %}
+{% block title %}My jobs — Pixelsmith{% endblock %}
+{% block content %}
+<h1 class="page-title">My jobs</h1>
+<p class="lede">Everything you have run recently. Files are removed {{ retentionHours }} hour{% if retentionHours != 1 %}s{% endif %} after a job finishes.</p>
+
+{% if jobs | length %}
+<table class="table">
+  <thead><tr><th>Tool</th><th>Status</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {% for j in jobs %}
+    <tr>
+      <td>{{ j.toolId }}</td>
+      <td>{{ m.statusPill(j.status) }}</td>
+      <td class="muted"><time>{{ j.createdAt }}</time></td>
+      <td><a href="/jobs/{{ j.id }}">Open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">
+  <p>Nothing yet.</p>
+  <a class="btn btn-primary" href="/">Pick a tool</a>
+</div>
+{% endif %}
+{% endblock %}

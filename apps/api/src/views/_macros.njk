@@ -1,0 +1,55 @@
+{# Renders one declarative tool field. The tool declares these once and both
+   this form and the API docs read from that same declaration. #}
+{% macro field(f) %}
+<div class="field" data-field="{{ f.name }}"
+     {% if f.showWhen %}data-show-when-field="{{ f.showWhen.field }}"
+     data-show-when-equals="{{ f.showWhen.equals | join(',') }}"{% endif %}>
+  <label for="f-{{ f.name }}">{{ f.label }}</label>
+
+  {% if f.kind == 'select' %}
+    <select id="f-{{ f.name }}" name="{{ f.name }}">
+      {% for opt in f.options %}
+        <option value="{{ opt.value }}" {% if opt.value == f.default %}selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+
+  {% elif f.kind == 'toggle' %}
+    <span class="toggle">
+      <input type="checkbox" id="f-{{ f.name }}" name="{{ f.name }}" value="true"
+             {% if f.default %}checked{% endif %}>
+      <span class="toggle-hint">{{ f.help or '' }}</span>
+    </span>
+
+  {% elif f.kind == 'textarea' %}
+    <textarea id="f-{{ f.name }}" name="{{ f.name }}" rows="10" spellcheck="false"
+              placeholder="&lt;h1&gt;Hello&lt;/h1&gt;">{% if f.default %}{{ f.default }}{% endif %}</textarea>
+
+  {% elif f.kind == 'number' or f.kind == 'range' %}
+    <input type="number" id="f-{{ f.name }}" name="{{ f.name }}"
+           {% if f.min is defined %}min="{{ f.min }}"{% endif %}
+           {% if f.max is defined %}max="{{ f.max }}"{% endif %}
+           {% if f.default is defined %}value="{{ f.default }}"{% endif %}
+           placeholder="auto">
+
+  {% elif f.kind == 'color' %}
+    <input type="color" id="f-{{ f.name }}" name="{{ f.name }}" value="{{ f.default or '#ffffff' }}">
+
+  {% else %}
+    <input type="text" id="f-{{ f.name }}" name="{{ f.name }}"
+           {% if f.default is defined %}value="{{ f.default }}"{% endif %}>
+  {% endif %}
+
+  {% if f.help and f.kind != 'toggle' %}<p class="hint">{{ f.help }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro bytes(n) %}
+{%- if n < 1024 -%}{{ n }} B
+{%- elif n < 1048576 -%}{{ (n / 1024) | round(1) }} KB
+{%- else -%}{{ (n / 1048576) | round(2) }} MB
+{%- endif -%}
+{% endmacro %}
+
+{% macro statusPill(status) %}
+<span class="pill pill-{{ status }}">{{ status }}</span>
+{% endmacro %}

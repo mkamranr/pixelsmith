@@ -1,0 +1,38 @@
+{% extends "layout.njk" %}
+{% block title %}API — Pixelsmith{% endblock %}
+{% block content %}
+<h1 class="page-title">REST API</h1>
+<p class="lede">
+  Scriptable access to the same tools the web pages use. Authenticate with a session
+  cookie, or an API key in an <code>Authorization: Bearer</code> header.
+</p>
+
+<h2 class="section-title">Endpoints</h2>
+<table class="table">
+  <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET</code></td><td><code>/healthz</code></td><td>Liveness, and which queue driver is active.</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/tools</code></td><td>Every tool with its parameters.</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/tools/{id}</code></td><td>One tool's parameter schema.</td></tr>
+    <tr><td><code>POST</code></td><td><code>/tools/{id}</code></td><td>Multipart upload; creates a job.</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/jobs/{id}</code></td><td>Job status and output list.</td></tr>
+    <tr><td><code>GET</code></td><td><code>/api/jobs/{id}/events</code></td><td>Progress as server-sent events.</td></tr>
+    <tr><td><code>GET</code></td><td><code>/jobs/{id}/files/{fileId}</code></td><td>Download one result.</td></tr>
+    <tr><td><code>GET</code></td><td><code>/jobs/{id}/download</code></td><td>Download all results as a zip.</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section-title">Available tools</h2>
+<ul class="plain-list">
+{% for group in groups %}{% for t in group.tools %}
+  <li><code>{{ t.id }}</code> — {{ t.title }}</li>
+{% endfor %}{% endfor %}
+</ul>
+
+<h2 class="section-title">Example</h2>
+<pre class="code"><code>curl -sS -X POST http://localhost:8080/tools/resize \
+  -H "Authorization: Bearer $PIXELSMITH_KEY" \
+  -F "files=@photo.jpg" \
+  -F "mode=pixels" -F "width=800"</code></pre>
+<p class="hint">The response redirects to the job page; poll <code>/api/jobs/{id}</code> for completion.</p>
+{% endblock %}

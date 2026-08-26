@@ -1,0 +1,22 @@
+{
+  "name": "@pixelsmith/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "description": "Consumes queued jobs. One binary serves every queue; which ones it listens to is configuration.",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "node --watch --import tsx src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@pixelsmith/contracts": "0.1.0",
+    "@pixelsmith/core": "0.1.0",
+    "@pixelsmith/db": "0.1.0",
+    "@pixelsmith/jobs": "0.1.0",
+    "bullmq": "5.56.0",
+    "ioredis": "5.6.1",
+    "pino": "9.7.0"
+  }
+}

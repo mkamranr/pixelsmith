@@ -1,0 +1,22 @@
+{% extends "layout.njk" %}
+{% block title %}Audit log — Pixelsmith{% endblock %}
+{% block content %}
+<h1 class="page-title">Audit log</h1>
+<p class="lede">Append-only record of sign-ins, account changes and jobs. Most recent first.</p>
+
+<table class="table">
+  <thead><tr><th>When</th><th>Action</th><th>User</th><th>Subject</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr>
+      <td class="muted">{{ e.at }}</td>
+      <td><code>{{ e.action }}</code></td>
+      <td class="muted">{{ e.userId | truncate(8, true, "") if e.userId else '—' }}</td>
+      <td class="muted">{{ e.subject | truncate(24, true, "…") if e.subject else '—' }}</td>
+      <td class="muted">{{ e.ip or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if not entries | length %}<div class="empty"><p>Nothing recorded yet.</p></div>{% endif %}
+{% endblock %}

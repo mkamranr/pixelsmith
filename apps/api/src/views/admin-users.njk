@@ -1,0 +1,61 @@
+{% extends "layout.njk" %}
+{% block title %}Users — Pixelsmith{% endblock %}
+{% block content %}
+<h1 class="page-title">Users</h1>
+<p class="lede">Accounts on this server. Every job is recorded against the account that ran it.</p>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok">{{ ok }}</div>{% endif %}
+
+<table class="table">
+  <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>State</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td>{{ u.email }}</td>
+      <td>{{ u.name }}</td>
+      <td>{{ u.role }}</td>
+      <td>{% if u.isActive %}<span class="pill pill-done">active</span>{% else %}<span class="pill pill-failed">disabled</span>{% endif %}</td>
+      <td class="row-actions">
+        {% if u.id != user.id %}
+        <form method="post" action="/admin/users/{{ u.id }}/state" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+          <input type="hidden" name="active" value="{{ 'false' if u.isActive else 'true' }}">
+          <button class="btn btn-quiet btn-sm" type="submit">{{ 'Disable' if u.isActive else 'Enable' }}</button>
+        </form>
+        <form method="post" action="/admin/users/{{ u.id }}/delete" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+          <button class="btn btn-danger btn-sm" type="submit"
+                  data-confirm="Delete {{ u.email }}? This also removes their job history.">Delete</button>
+        </form>
+        {% else %}
+          <span class="muted">that is you</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 class="section-title">Add a user</h2>
+<form method="post" action="/admin/users" class="stack narrow">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field"><label for="u-name">Name</label><input id="u-name" name="name" required></div>
+  <div class="field"><label for="u-email">Email</label><input type="email" id="u-email" name="email" required></div>
+  <div class="field">
+    <label for="u-password">Initial password</label>
+    <input type="password" id="u-password" name="password" minlength="12" required>
+    <p class="hint">At least 12 characters. They will be asked to change it.</p>
+  </div>
+  <div class="field">
+    <label for="u-role">Role</label>
+    <select id="u-role" name="role">
+      <option value="user">User</option>
+      <option value="admin">Administrator</option>
+    </select>
+  </div>
+  <button class="btn btn-primary" type="submit">Create user</button>
+</form>
+
+<p class="hint"><a href="/admin/audit">View the audit log</a></p>
+{% endblock %}

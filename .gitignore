@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Runtime data — never commit job files or the database
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Vendored binary assets are fetched by infra/bundle/fetch-assets.sh
+# and verified against assets/vendor/MANIFEST.md. Never committed.
+assets/vendor/**
+!assets/vendor/MANIFEST.md
+!assets/vendor/.gitkeep
+
+# Offline bundle output
+infra/bundle/out/
+
+.env
+.env.local
+.DS_Store
+test-results/
+playwright-report/

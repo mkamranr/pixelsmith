@@ -1,0 +1,141 @@
+# Pixelsmith — air-gapped deployment.
+#
+# Network layout is the security boundary, not a convenience:
+#   - `edge` carries only the API, and is the only place anything is published.
+#   - `internal` is marked internal:true, so Redis, the runners and the
+#     inference sidecar have no route off this host at all. That is what makes
+#     "nothing phones home" a property of the deployment rather than a promise.
+
+name: pixelsmith
+
+x-common: &common
+  restart: unless-stopped
+  # Sensible defaults for a machine nobody can easily log into.
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  api:
+    <<: *common
+    image: pixelsmith/api:${PIXELSMITH_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8080"
+      DATA_DIR: /data
+      # Required in production; install.sh generates it.
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET must be set - run install.sh}
+      QUEUE_DRIVER: redis
+      REDIS_URL: redis://redis:6379
+      RETENTION_HOURS: ${RETENTION_HOURS:-2}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-209715200}
+      MAX_FILES_PER_JOB: ${MAX_FILES_PER_JOB:-30}
+      INFERENCE_URL: http://inference:8188
+      # Empty by default: URL rendering stays refused until an operator
+      # deliberately allowlists an internal host.
+      ALLOWED_RENDER_HOSTS: ${ALLOWED_RENDER_HOSTS:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - jobdata:/data
+    ports:
+      # Bound to localhost by default: put your own TLS proxy in front, or set
+      # PUBLISH_ADDR=0.0.0.0 if the host firewall is the boundary.
+      - "${PUBLISH_ADDR:-127.0.0.1}:${PUBLISH_PORT:-8080}:8080"
+    networks: [edge, internal]
+    depends_on:
+      redis: { condition: service_healthy }
+    tmpfs:
+      - /tmp:size=256m
+
+  runner:
+    <<: *common
+    image: pixelsmith/runner:${PIXELSMITH_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: infra/docker/runner.Dockerfile
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379
+      QUEUE_NAMES: image,render,ml
+      CONCURRENCY: ${RUNNER_CONCURRENCY:-2}
+      RETENTION_HOURS: ${RETENTION_HOURS:-2}
+      JOB_TIMEOUT_MINUTES: ${JOB_TIMEOUT_MINUTES:-15}
+      INFERENCE_URL: http://inference:8188
+      CHROMIUM_PATH: /usr/bin/chromium
+      ALLOWED_RENDER_HOSTS: ${ALLOWED_RENDER_HOSTS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      # Mounted at the SAME path as the API: the database stores paths relative
+      # to the job directory, but the runner resolves them against this root, so
+      # the two must agree.
+      - jobdata:/data
+    networks: [internal]
+    depends_on:
+      redis: { condition: service_healthy }
+      api: { condition: service_started }
+    # Scale with: docker compose up -d --scale runner=4
+    deploy:
+      replicas: ${RUNNER_REPLICAS:-2}
+    tmpfs:
+      - /tmp:size=512m
+    # Chromium needs a slightly larger shared memory segment than the default.
+    shm_size: 256m
+
+  inference:
+    <<: *common
+    image: pixelsmith/inference:${PIXELSMITH_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: infra/docker/inference.Dockerfile
+    environment:
+      PIXELSMITH_MODEL_DIR: /models
+      PIXELSMITH_THREADS: ${INFERENCE_THREADS:-2}
+      PIXELSMITH_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      # Reads the input, writes the output; same shared volume, same paths.
+      - jobdata:/data
+    networks: [internal]
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+
+  redis:
+    <<: *common
+    image: redis:7.4-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60 1000"
+      # A queue is not a cache: losing it loses queued user work.
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redisdata:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  edge:
+  internal:
+    # The whole point: no route out of this host for anything behind the API.
+    internal: true
+
+volumes:
+  jobdata:
+  redisdata:

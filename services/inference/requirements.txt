@@ -1,0 +1,10 @@
+# Pinned exactly: the isolated server installs nothing, so these versions are
+# what gets baked into the image and what the build is tested against.
+fastapi==0.115.6
+uvicorn==0.34.0
+numpy==1.26.4
+onnxruntime==1.19.2
+# The contrib build is required: dnn_superres (used for upscaling) is not in the
+# base opencv package. headless avoids pulling in GUI/X11 libraries.
+opencv-contrib-python-headless==4.10.0.84
+python-multipart==0.0.20

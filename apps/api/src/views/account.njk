@@ -1,0 +1,38 @@
+{% extends "layout.njk" %}
+{% block title %}Account — Pixelsmith{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1 class="page-title">Account</h1>
+  <dl class="detail">
+    <dt>Name</dt><dd>{{ user.name }}</dd>
+    <dt>Email</dt><dd>{{ user.email }}</dd>
+    <dt>Role</dt><dd>{{ user.role }}</dd>
+  </dl>
+
+  {% if user.mustChangePassword %}
+    <div class="alert">Your password was set by an administrator. Please choose your own.</div>
+  {% endif %}
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  {% if ok %}<div class="alert alert-ok">{{ ok }}</div>{% endif %}
+
+  <h2 class="section-title">Change password</h2>
+  <form method="post" action="/account/password" class="stack">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <div class="field">
+      <label for="current">Current password</label>
+      <input type="password" id="current" name="current" autocomplete="current-password" required>
+    </div>
+    <div class="field">
+      <label for="next">New password</label>
+      <input type="password" id="next" name="next" autocomplete="new-password" minlength="12" required>
+      <p class="hint">At least 12 characters.</p>
+    </div>
+    <div class="field">
+      <label for="confirm">Confirm new password</label>
+      <input type="password" id="confirm" name="confirm" autocomplete="new-password" minlength="12" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Update password</button>
+  </form>
+  <p class="hint">Changing your password signs out your other sessions.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,217 @@
+# Pixelsmith runbook
+
+Day-to-day operation of a Pixelsmith deployment on an isolated network.
+
+Everything below assumes you are in the install directory (the one containing
+`docker-compose.yml` and `.env`). All commands are offline.
+
+---
+
+## Everyday commands
+
+```bash
+docker compose ps                       # what is running
+docker compose logs -f api              # follow the web server
+docker compose logs -f runner           # follow job processing
+docker compose restart api              # restart just the web tier
+docker compose down                     # stop everything (data is kept)
+docker compose up -d                    # start again
+```
+
+Job files and the database live in the `pixelsmith_jobdata` volume; the queue
+lives in `pixelsmith_redisdata`. Neither is removed by `down`. Only
+`down -v` destroys them.
+
+---
+
+## First sign-in
+
+The first administrator is created once, on an empty database. If you did not
+set `BOOTSTRAP_ADMIN_PASSWORD`, a password was generated and printed to the log
+exactly once:
+
+```bash
+docker compose logs api | grep -i "generated password"
+```
+
+Sign in and change it immediately. If that log line has already rotated away,
+see *Locked out* below.
+
+## Adding people
+
+Users are created by an administrator in the web interface: **Users → Add a
+user**. There is no self-registration, and no password reset by email — on an
+isolated network there is no mail. An administrator sets a temporary password
+and the person is asked to change it on first sign-in.
+
+Every job is recorded against the account that ran it. **Users → View the audit
+log** shows sign-ins, account changes and job submissions.
+
+---
+
+## Capacity
+
+Total parallel work is `RUNNER_REPLICAS × RUNNER_CONCURRENCY`. Keep that at or
+below the host's core count — image processing is CPU-bound, and oversubscribing
+makes every job slower rather than getting more done.
+
+```bash
+# more workers
+docker compose up -d --scale runner=4
+
+# or persist it
+sed -i 's/^RUNNER_REPLICAS=.*/RUNNER_REPLICAS=4/' .env && docker compose up -d
+```
+
+Upscaling and background removal are the slow operations: tens of seconds per
+image on CPU, which is expected and is why the queue exists. If they dominate
+your usage, give `inference` more threads (`INFERENCE_THREADS`) rather than more
+runners — the runners are only waiting on it.
+
+---
+
+## Retention
+
+Finished job files are deleted `RETENTION_HOURS` after the job completes
+(default 2). A sweeper runs every 10 minutes and also removes orphaned
+directories that have no database row, so a crash mid-upload cannot leave
+images on disk indefinitely.
+
+To change it:
+
+```bash
+sed -i 's/^RETENTION_HOURS=.*/RETENTION_HOURS=8/' .env
+docker compose up -d
+```
+
+Retention is measured from job completion, not submission, so a job that queued
+behind a long backlog still gets its full download window.
+
+---
+
+## Backups
+
+The only irreplaceable state is the database — accounts and the audit log. Job
+files are ephemeral by design and do not need backing up.
+
+```bash
+# Consistent copy of the database (SQLite is in WAL mode; use its own backup)
+docker compose exec api node -e "\
+  const db=require('better-sqlite3')('/data/pixelsmith.sqlite',{readonly:true});\
+  db.backup('/data/backup.sqlite').then(()=>console.log('ok'))"
+
+docker compose cp api:/data/backup.sqlite ./pixelsmith-$(date +%F).sqlite
+```
+
+Store that file wherever your other sensitive backups go. It contains password
+hashes (Argon2id) and the audit trail.
+
+---
+
+## Upgrading
+
+1. Build a new bundle on the connected machine.
+2. Copy it to the server.
+3. Stop the old stack: `docker compose down`.
+4. Run the new bundle's `./install.sh` — it will reuse the existing `.env` and
+   the existing volumes, so accounts and history survive.
+
+Schema migrations run automatically when the API starts. The runners
+deliberately do **not** migrate: one process owns the schema, so there is no
+race between replicas at startup.
+
+Roll back by loading the previous bundle's images and starting it again. Keep
+the previous bundle until you are satisfied with the new one.
+
+---
+
+## Locked out
+
+**Forgot the admin password, no other admin account.** There is no email reset.
+Promote a user, or reset a password, directly:
+
+```bash
+# List accounts
+docker compose exec api node -e "\
+  const db=require('better-sqlite3')('/data/pixelsmith.sqlite');\
+  console.table(db.prepare('select email, role, is_active from users').all())"
+```
+
+To set a known password for an account, use the API container's own hashing so
+the stored value is a valid Argon2id hash:
+
+```bash
+docker compose exec api node -e "\
+  const {hash}=require('@node-rs/argon2');\
+  const db=require('better-sqlite3')('/data/pixelsmith.sqlite');\
+  hash(process.argv[1],{memoryCost:19456,timeCost:2,parallelism:1}).then(h=>{\
+    db.prepare('update users set password_hash=?, must_change_password=1, failed_login_count=0, locked_until=null where email=?')\
+      .run(h, process.argv[2]);\
+    console.log('reset');\
+  })" 'a-new-long-password' 'admin@pixelsmith.local'
+```
+
+Then sign in and change it through the interface. Doing this leaves no audit
+entry, which is itself worth noting in your own records.
+
+**Account locked after failed attempts.** Locks expire on their own after 15
+minutes. An administrator can also disable and re-enable the account, which
+clears the lock and ends its sessions.
+
+---
+
+## Diagnosing a failure
+
+Jobs record their own failures. The user sees the reason on the job page, and
+the code is one of:
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `unsupported_input` | Not an image, or a format we do not accept | Nothing; the upload was wrong |
+| `malformed_image` | Truncated or corrupt file | Ask for a re-export |
+| `unsafe_svg` | SVG contained a script, entity or external reference | Refused deliberately; see below |
+| `limit_exceeded` | Too large, too many pixels, or too many frames | Raise limits in `.env` if legitimate |
+| `invalid_params` | Options did not validate | A UI bug worth reporting |
+| `inference_unavailable` | The sidecar is down or a model is missing | `docker compose logs inference` |
+| `internal_error` | Anything unexpected | `docker compose logs runner` |
+
+`unsafe_svg` is not a malfunction. SVG is a program, not a picture: a file with
+a `DOCTYPE` entity can read files off the host, and an external reference makes
+the renderer fetch a URL from inside your network. Those are refused rather than
+sanitised, because rewriting XML reliably is harder than refusing it.
+
+**Jobs stay queued forever.** The runners are not consuming. Check
+`docker compose ps` and `docker compose logs runner`; the usual cause is Redis
+being unreachable.
+
+**HTML→image fails on a URL.** Expected unless you set `ALLOWED_RENDER_HOSTS`.
+An empty allowlist refuses all URL rendering; pasted HTML always works.
+
+---
+
+## Confirming the air gap
+
+The `internal` compose network is declared `internal: true`, so Redis, the
+runners and the inference sidecar have no route off the host. To confirm that on
+the live deployment:
+
+```bash
+docker run --rm --network pixelsmith_internal alpine:3.20 \
+  sh -c 'timeout 5 wget -q -O- http://1.1.1.1 || echo "no egress (correct)"'
+```
+
+Only `api` is published, and only on the address in `PUBLISH_ADDR`. The pages
+themselves load no external resource: the Content-Security-Policy is
+`default-src 'self'` with no exceptions, so a browser would refuse one even if a
+page asked.
+
+---
+
+## What is deliberately not here
+
+- **No TLS.** The stack serves plain HTTP on the loopback interface. Put your
+  existing reverse proxy in front, and set `TRUST_PROXY=true` so the audit log
+  records real client addresses instead of the proxy's.
+- **No metrics endpoint or external monitoring.** Use `docker compose ps`,
+  the healthchecks, and the logs.
+- **No automatic upgrades.** Nothing reaches out, ever, including for updates.

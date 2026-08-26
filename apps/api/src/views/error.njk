@@ -1,0 +1,9 @@
+{% extends "layout.njk" %}
+{% block title %}{{ status }} — Pixelsmith{% endblock %}
+{% block content %}
+<div class="narrow center">
+  <p class="error-code">{{ status }}</p>
+  <h1 class="page-title">{{ message }}</h1>
+  <p><a class="btn btn-primary" href="/">Back to the tools</a></p>
+</div>
+{% endblock %}

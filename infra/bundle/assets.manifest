@@ -1,0 +1,17 @@
+# Pixelsmith vendored assets.
+#
+# Format: <target-path>|<url>|<license>|<sha256 or "PENDING">
+#
+# Every binary that ships inside the offline bundle is listed here with a pinned
+# checksum. fetch-assets.sh refuses to proceed on a mismatch: on an air-gapped
+# deployment nobody can re-download a corrupted or substituted model later, so
+# the integrity check has to happen on the build machine, once, loudly.
+#
+# Licences are recorded because this ships into an environment where every
+# component has to be accounted for. Nothing copyleft, nothing research-only.
+
+models/u2net.onnx|https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx|Apache-2.0 (U-2-Net)|8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491
+models/u2netp.onnx|https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx|Apache-2.0 (U-2-Net)|309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8
+models/face_detection_yunet.onnx|https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx|Apache-2.0 (OpenCV Zoo)|8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+models/FSRCNN_x2.pb|https://github.com/Saafke/FSRCNN_Tensorflow/raw/master/models/FSRCNN_x2.pb|Apache-2.0 (FSRCNN_Tensorflow)|366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c
+models/FSRCNN_x4.pb|https://github.com/Saafke/FSRCNN_Tensorflow/raw/master/models/FSRCNN_x4.pb|Apache-2.0 (FSRCNN_Tensorflow)|5c68d18db561aed8ead4ffedf1b897ea615baaf60ebf6c35f8e641f8fa4a21bf

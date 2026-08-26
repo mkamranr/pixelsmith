@@ -1,0 +1,114 @@
+{% extends "layout.njk" %}
+{% import "_macros.njk" as m %}
+{% import "_icons.njk" as ic %}
+{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block content %}
+
+<nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+{% if not user %}
+  <h1 class="page-title">{{ tool.title }}</h1>
+  <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before processing images.</div>
+{% else %}
+
+{# The whole two-pane layout is the form, so the file stage on the left and the
+   options on the right submit together. #}
+<form class="workspace" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data"
+      data-tool="{{ tool.id }}" data-preview="{{ tool.ui.preview or 'none' }}"
+      data-input-mode="{{ tool.inputMode or 'files' }}">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+  <section class="stage" data-stage>
+    {% if tool.inputMode != 'none' %}
+      <div class="stage-head" data-stage-head hidden>
+        <div class="stage-count">
+          <strong data-file-count>0</strong> <span data-file-noun>files</span>
+        </div>
+        <div class="stage-actions">
+          <div class="filter-chips" data-orientation-filter hidden role="group" aria-label="Filter files by shape">
+            <button type="button" class="chip-btn is-active" data-filter="all">All</button>
+            <button type="button" class="chip-btn" data-filter="portrait">Portrait</button>
+            <button type="button" class="chip-btn" data-filter="landscape">Landscape</button>
+          </div>
+          <button type="button" class="btn btn-sm" data-add-more>
+            Add more<span class="count-badge" data-file-count>0</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="dropzone" data-dropzone>
+        <input type="file" id="files" name="files" multiple accept="image/*" required data-file-input>
+        <label for="files" class="dropzone-label">
+          <span class="dropzone-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <path d="M7 10l5-5 5 5"/><path d="M12 5v12"/>
+            </svg>
+          </span>
+          <strong>Choose images</strong>
+          <span class="muted">or drag them here — up to {{ maxFiles }} files, {{ maxUploadMb }} MB each</span>
+        </label>
+      </div>
+
+      <ul class="thumb-grid" data-thumbs hidden></ul>
+      <p class="stage-hint" data-stage-hint hidden></p>
+      <noscript><p class="hint">Thumbnails and live previews need JavaScript; the tool itself works without it.</p></noscript>
+    {% else %}
+      <div class="stage-empty">
+        <h2>{{ tool.title }}</h2>
+        <p class="muted">{{ tool.ui.blurb }}</p>
+        <p class="hint">This tool builds an image from the settings on the right — there is nothing to upload.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h1><span class="panel-icon">{{ ic.icon(tool.ui.icon, 20) }}</span>{{ tool.title }}</h1>
+      {% if tool.ui.blurb %}<p class="muted">{{ tool.ui.blurb }}</p>{% endif %}
+    </div>
+
+    {% if tool.ui.preview == 'transform' %}
+      {# Quick rotation controls, added by script; the select below is the
+         no-JavaScript fallback and stays the source of truth. #}
+      <div class="quick-rotate" data-quick-rotate hidden>
+        <span class="panel-label">Rotation</span>
+        <div class="quick-row">
+          <button type="button" class="btn quick-btn" data-rotate="90">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/>
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/></svg>
+            Right
+          </button>
+          <button type="button" class="btn quick-btn" data-rotate="-90">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"/>
+              <path d="M21 12a9 9 0 0 0-15-6.7L3 8"/></svg>
+            Left
+          </button>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if tool.ui.fields | length %}
+      <div class="panel-fields">
+        {% for f in tool.ui.fields %}{{ m.field(f) }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="panel-footer">
+      <button class="btn btn-primary btn-block btn-lg" type="submit">
+        {{ tool.title }}
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="hint" data-summary></p>
+    </div>
+  </aside>
+</form>
+{% endif %}
+{% endblock %}

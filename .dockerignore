@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+data
+.venv-inference
+infra/bundle/out
+.git
+tests/fixtures/tmp
+*.log
+# NOTE: assets/vendor/models is deliberately NOT excluded — the inference
+# image COPYs the weights from the build context. Excluding them here would
+# make that COPY fail.

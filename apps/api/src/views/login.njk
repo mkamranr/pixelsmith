@@ -1,0 +1,23 @@
+{% extends "layout.njk" %}
+{% block title %}Sign in — Pixelsmith{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1 class="page-title">Sign in</h1>
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" autocomplete="username" required autofocus>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-primary btn-lg" type="submit">Sign in</button>
+  </form>
+  <p class="hint">Accounts are created by an administrator.</p>
+</div>
+{% endblock %}
