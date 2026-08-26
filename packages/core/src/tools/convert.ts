@@ -32,6 +32,7 @@ export const convert: Tool<ConvertParams> = {
     group: 'convert',
     icon: 'file-image',
     preview: 'format',
+    surface: 'canvas',
     blurb: 'Move images between JPEG, PNG, WebP, AVIF and TIFF — including HEIC and SVG inputs.',
     fields: [
       {

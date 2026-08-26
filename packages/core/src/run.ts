@@ -23,6 +23,8 @@ export interface RunToolArgs {
   signal?: AbortSignal
   limits?: ProbeLimits
   settings?: RuntimeSettings
+  /** Supporting files keyed by field name (absolute paths). */
+  assets?: Record<string, string>
 }
 
 /**
@@ -66,6 +68,7 @@ export async function runTool(tool: Tool, args: RunToolArgs): Promise<OutputFile
     inputs,
     outDir: args.outDir,
     params,
+    assets: args.assets ?? {},
     settings: args.settings ?? DEFAULT_SETTINGS,
     ...(args.signal ? { signal: args.signal } : {}),
     ...(args.onProgress ? { onProgress: args.onProgress } : {}),

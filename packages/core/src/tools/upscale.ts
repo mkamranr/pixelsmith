@@ -42,6 +42,7 @@ export const upscale: Tool<UpscaleParams> = {
     group: 'modify',
     icon: 'maximize',
     preview: 'dimensions',
+    surface: 'canvas',
     blurb: 'Enlarge an image with a neural network instead of a blur — recovers detail plain scaling cannot.',
     fields: [
       {

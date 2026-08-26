@@ -28,6 +28,7 @@ export const rotate: Tool<RotateParams> = {
     group: 'modify',
     icon: 'rotate-cw',
     preview: 'transform',
+    surface: 'canvas',
     blurb: 'Turn images by a quarter, a half, or any angle you like — and mirror them.',
     fields: [
       {

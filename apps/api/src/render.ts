@@ -31,6 +31,7 @@ export function pageData(ctx: AppContext, req: FastifyRequest, reply: FastifyRep
     maxFiles: ctx.config.MAX_FILES_PER_JOB,
     maxUploadMb: Math.round(ctx.config.MAX_UPLOAD_BYTES / (1024 * 1024)),
     queueDriver: ctx.queue.driver,
+    allowedRenderHosts: ctx.config.allowedRenderHosts,
     ...extras,
   }
 }

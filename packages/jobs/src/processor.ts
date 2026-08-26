@@ -50,10 +50,16 @@ export function createProcessor(deps: ProcessorDeps) {
           .filter((f) => f.role === 'input')
           .map((f) => ({ path: deps.storage.resolveFile(jobId, f.relPath), name: f.name }))
 
+        const assets: Record<string, string> = {}
+        for (const file of files.filter((f) => f.role === 'asset')) {
+          assets[file.name] = deps.storage.resolveFile(jobId, file.relPath)
+        }
+
         const outputs = await runTool(tool, {
           inputs,
           outDir: paths.outDir,
           params: job.params,
+          assets,
           ...(deps.settings ? { settings: deps.settings } : {}),
           onProgress: (fraction) => {
             void deps.jobs.updateProgress(jobId, fraction * 100)

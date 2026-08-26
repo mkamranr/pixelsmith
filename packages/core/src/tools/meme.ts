@@ -73,6 +73,7 @@ export const meme: Tool<MemeParams> = {
     group: 'create',
     icon: 'message-square',
     preview: 'caption',
+    surface: 'canvas',
     blurb: 'Add bold captions across the top and bottom of any picture.',
     fields: [
       { name: 'top', label: 'Top caption', kind: 'text' },

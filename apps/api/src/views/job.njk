@@ -78,10 +78,11 @@
 
 {% if tool %}
 <section class="next-steps">
-  <h2 class="section-title">Do something else</h2>
+  <h2 class="section-title">Do something else with these results</h2>
+  <p class="hint">These files carry straight over — nothing to download and upload again.</p>
   <ul class="chip-row">
     {% for group in groups %}{% for t in group.tools %}{% if t.id != job.toolId %}
-      <li><a class="chip" href="/tools/{{ t.id }}">{{ t.title }}</a></li>
+      <li><a class="chip" href="/tools/{{ t.id }}?from={{ job.id }}">{{ t.title }}</a></li>
     {% endif %}{% endfor %}{% endfor %}
   </ul>
 </section>

@@ -1,0 +1,111 @@
+{% extends "layout.njk" %}
+{% import "_icons.njk" as ic %}
+{% import "_macros.njk" as m %}
+{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block content %}
+
+<nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+{% if not user %}
+  <h1 class="page-title">{{ tool.title }}</h1>
+  <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before cropping images.</div>
+{% else %}
+
+<form class="workspace" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data" data-cropper>
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+  <section class="stage crop-stage" data-stage>
+    {{ m.carried(sourceJob, sourceFiles) }}
+    <div class="stage-head" data-stage-head hidden>
+      <div class="stage-count">
+        <strong data-file-count>0</strong> <span data-file-noun>files</span>
+        <span class="muted" data-same-rect hidden>— the same area is cropped from each</span>
+      </div>
+      <div class="stage-actions">
+        <button type="button" class="btn btn-sm" data-add-more>Change images</button>
+        <button type="button" class="btn btn-sm" data-select-all>Select all</button>
+      </div>
+    </div>
+
+    <div class="dropzone" data-dropzone>
+      <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
+      <label for="files" class="dropzone-label">
+        <span class="dropzone-icon" aria-hidden="true">{{ ic.icon('crop', 34) }}</span>
+        <strong>Choose images to crop</strong>
+        <span class="muted">Drag the box on the picture, or type exact numbers on the right</span>
+      </label>
+    </div>
+
+    <div class="crop-workspace" data-crop-workspace hidden>
+      {# The image and the selection share this box, so the selection can be
+         positioned against the rendered image rather than the container. #}
+      <div class="crop-viewport" data-viewport>
+        <img data-crop-image alt="Crop preview">
+        <div class="crop-shade" data-shade hidden></div>
+        <div class="crop-selection" data-selection hidden>
+          <div class="crop-thirds" aria-hidden="true"></div>
+          <span class="crop-size" data-size-label></span>
+          {% for h in ['nw','n','ne','e','se','s','sw','w'] %}
+            <span class="crop-handle crop-handle-{{ h }}" data-handle="{{ h }}"></span>
+          {% endfor %}
+        </div>
+      </div>
+      <p class="stage-hint" data-crop-hint></p>
+      <ul class="crop-filmstrip" data-filmstrip hidden></ul>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h1><span class="panel-icon">{{ ic.icon('crop', 20) }}</span>Crop options</h1>
+      <p class="muted">{{ tool.ui.blurb }}</p>
+    </div>
+
+    <div class="panel-group">
+      <span class="panel-label">Aspect ratio</span>
+      <div class="ratio-row" data-ratios>
+        <button type="button" class="chip-btn is-active" data-ratio="free">Free</button>
+        <button type="button" class="chip-btn" data-ratio="1">1:1</button>
+        <button type="button" class="chip-btn" data-ratio="1.7777">16:9</button>
+        <button type="button" class="chip-btn" data-ratio="1.3333">4:3</button>
+        <button type="button" class="chip-btn" data-ratio="0.8">4:5</button>
+      </div>
+    </div>
+
+    <div class="panel-fields">
+      <div class="field">
+        <label for="f-width">Width (px)</label>
+        <input type="number" id="f-width" name="width" min="1" required data-crop-field="width">
+      </div>
+      <div class="field">
+        <label for="f-height">Height (px)</label>
+        <input type="number" id="f-height" name="height" min="1" required data-crop-field="height">
+      </div>
+      <div class="field">
+        <label for="f-x">Position X (px)</label>
+        <input type="number" id="f-x" name="x" min="0" value="0" required data-crop-field="x">
+      </div>
+      <div class="field">
+        <label for="f-y">Position Y (px)</label>
+        <input type="number" id="f-y" name="y" min="0" value="0" required data-crop-field="y">
+      </div>
+      <p class="hint" data-bounds-note></p>
+    </div>
+
+    <div class="panel-footer">
+      <button class="btn btn-primary btn-block btn-lg" type="submit">
+        Crop images
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </aside>
+</form>
+
+<script src="/static/crop.js" defer></script>
+{% endif %}
+{% endblock %}

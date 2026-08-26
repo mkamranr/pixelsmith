@@ -193,3 +193,71 @@ describe('blur faces', () => {
     expect(blurFaces.params.safeParse({ confidence: 101 }).success).toBe(false)
   })
 })
+
+describe('blur faces with operator corrections', () => {
+  it('sends manually added regions alongside detection', async () => {
+    const src = await fx.writePng(dir, 'bf-manual.png', 200, 100)
+    await runTool(blurFaces, {
+      inputs: [src],
+      outDir: join(outDir, 'manual'),
+      params: { regions: JSON.stringify([{ x: 10, y: 20, width: 30, height: 40 }]) },
+      settings: settings(),
+    })
+    expect(lastCall().body.extra_regions).toEqual([{ x: 10, y: 20, width: 30, height: 40 }])
+    expect(lastCall().body.detect).toBe(true)
+  })
+
+  it('can turn detection off entirely, redacting only what the operator marked', async () => {
+    const src = await fx.writePng(dir, 'bf-only.png', 200, 100)
+    await runTool(blurFaces, {
+      inputs: [src],
+      outDir: join(outDir, 'only'),
+      params: {
+        detect: false,
+        regions: JSON.stringify([{ x: 1, y: 2, width: 3, height: 4 }]),
+      },
+      settings: settings(),
+    })
+    expect(lastCall().body.detect).toBe(false)
+    expect(lastCall().body.extra_regions).toHaveLength(1)
+  })
+
+  it('treats an absent region list as none, not as an error', async () => {
+    const src = await fx.writePng(dir, 'bf-none.png', 200, 100)
+    await runTool(blurFaces, { inputs: [src], outDir: join(outDir, 'none'), params: {}, settings: settings() })
+    expect(lastCall().body.extra_regions).toEqual([])
+  })
+
+  it('rejects a malformed region list rather than silently ignoring it', async () => {
+    const src = await fx.writePng(dir, 'bf-bad.png', 200, 100)
+    await expect(
+      runTool(blurFaces, {
+        inputs: [src], outDir: join(outDir, 'bad'), params: { regions: 'not json' }, settings: settings(),
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects a region with negative geometry', async () => {
+    const src = await fx.writePng(dir, 'bf-neg.png', 200, 100)
+    await expect(
+      runTool(blurFaces, {
+        inputs: [src], outDir: join(outDir, 'neg'),
+        params: { regions: JSON.stringify([{ x: -5, y: 0, width: 10, height: 10 }]) },
+        settings: settings(),
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('refuses a job that would redact nothing at all', () => {
+    // Detection off with no manual regions cannot alter the image; returning it
+    // unchanged while implying it was redacted is the dangerous outcome.
+    expect(blurFaces.params.safeParse({ detect: false }).success).toBe(false)
+    expect(blurFaces.params.safeParse({ detect: false, regions: '[]' }).success).toBe(false)
+  })
+
+  it('accepts detection presets as strings, the way a form submits them', () => {
+    for (const value of ['40', '70', '90']) {
+      expect(blurFaces.params.safeParse({ confidence: value }).success).toBe(true)
+    }
+  })
+})

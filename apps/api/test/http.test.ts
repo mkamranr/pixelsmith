@@ -327,3 +327,47 @@ describe('processing and download', () => {
     expect(file.rawPayload.length).toBeGreaterThan(0)
   })
 })
+
+describe('supporting files', () => {
+  it('records a second file field as an asset, not as another image to process', async () => {
+    const { cookie } = await signIn(h, 'asset@example.test')
+    const page = await h.app.inject({ method: 'GET', url: '/tools/watermark', headers: { cookie } })
+
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/tools/watermark',
+      headers: uploadHeaders(cookieJar(cookie, page)),
+      payload: multipart({ mark: 'image', markScale: '30', _csrf: csrfFrom(page.body) }, [
+        { name: 'files', filename: 'base.png', data: await samplePng(200, 150) },
+        { name: 'markFile', filename: 'logo.png', data: await samplePng(40, 40) },
+      ]),
+    })
+    expect(res.statusCode).toBe(302)
+    const id = String(res.headers.location).replace('/jobs/', '')
+
+    const files = await h.ctx.jobs.listFiles(id)
+    expect(files.filter((f) => f.role === 'input')).toHaveLength(1)
+    expect(files.filter((f) => f.role === 'asset').map((f) => f.name)).toEqual(['markFile'])
+
+    await h.ctx.queue.close()
+    expect((await h.ctx.jobs.getJob(id))?.status).toBe('done')
+  })
+
+  it('ignores an empty file input rather than failing the job', async () => {
+    const { cookie } = await signIn(h, 'empty@example.test')
+    const page = await h.app.inject({ method: 'GET', url: '/tools/watermark', headers: { cookie } })
+
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/tools/watermark',
+      headers: uploadHeaders(cookieJar(cookie, page)),
+      // A file input the user never touched submits a zero-byte part.
+      payload: multipart({ mark: 'text', text: 'DRAFT', _csrf: csrfFrom(page.body) }, [
+        { name: 'files', filename: 'base.png', data: await samplePng(120, 90) },
+        { name: 'markFile', filename: '', data: Buffer.alloc(0) },
+      ]),
+    })
+    expect(res.statusCode).toBe(302)
+    expect(res.headers.location).toMatch(/^\/jobs\//)
+  })
+})

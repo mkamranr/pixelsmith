@@ -12,9 +12,13 @@ export const ResizeParams = z
     width: z.number().int().positive().max(40_000).optional(),
     height: z.number().int().positive().max(40_000).optional(),
     percent: z.number().positive().max(1000).optional(),
-    fit: z.enum(['inside', 'cover', 'fill']).default('inside'),
-    /** On by default: silently upscaling someone's image is rarely wanted. */
-    noEnlarge: z.boolean().default(true),
+    /**
+     * What a person actually reasons about. `fit` remains available to API
+     * callers that want 'cover', and takes precedence when supplied.
+     */
+    maintainAspect: z.boolean().default(true),
+    fit: z.enum(['inside', 'cover', 'fill']).optional(),
+    noEnlarge: z.boolean().default(false),
   })
   .superRefine((v, ctx) => {
     if (v.mode === 'pixels' && v.width === undefined && v.height === undefined) {
@@ -37,34 +41,30 @@ export const resize: Tool<ResizeParams> = {
     group: 'modify',
     icon: 'scaling',
     preview: 'dimensions',
+    surface: 'canvas',
     blurb: 'Change the dimensions of one image or a whole batch, by pixels or by percentage.',
     fields: [
       {
         name: 'mode',
         label: 'Resize by',
-        kind: 'select',
+        kind: 'segmented',
         default: 'pixels',
         options: [
-          { value: 'pixels', label: 'Pixels' },
-          { value: 'percent', label: 'Percentage' },
+          { value: 'pixels', label: 'By pixels' },
+          { value: 'percent', label: 'By percentage' },
         ],
       },
       { name: 'width', label: 'Width (px)', kind: 'number', min: 1, max: 40000, showWhen: { field: 'mode', equals: ['pixels'] } },
       { name: 'height', label: 'Height (px)', kind: 'number', min: 1, max: 40000, showWhen: { field: 'mode', equals: ['pixels'] } },
       { name: 'percent', label: 'Scale (%)', kind: 'number', min: 1, max: 1000, default: 50, showWhen: { field: 'mode', equals: ['percent'] } },
       {
-        name: 'fit',
-        label: 'Fit',
-        kind: 'select',
-        default: 'inside',
+        name: 'maintainAspect',
+        label: 'Maintain aspect ratio',
+        kind: 'toggle',
+        default: true,
         showWhen: { field: 'mode', equals: ['pixels'] },
-        options: [
-          { value: 'inside', label: 'Fit inside (keep proportions)' },
-          { value: 'cover', label: 'Cover and crop' },
-          { value: 'fill', label: 'Stretch to exact size' },
-        ],
       },
-      { name: 'noEnlarge', label: "Don't enlarge smaller images", kind: 'toggle', default: true },
+      { name: 'noEnlarge', label: 'Do not enlarge if smaller', kind: 'toggle', default: false },
     ],
   },
 
@@ -93,9 +93,13 @@ export const resize: Tool<ResizeParams> = {
       }
 
       const format = probe.format ?? 'png'
+      // Percentage always computes both sides itself, so 'fill' is exact there.
+      const fit =
+        params.mode === 'percent' ? 'fill' : (params.fit ?? (params.maintainAspect ? 'inside' : 'fill'))
+
       const resized = img.resize({
         ...target,
-        fit: params.mode === 'percent' ? 'fill' : params.fit,
+        fit,
         withoutEnlargement: params.noEnlarge,
       })
 

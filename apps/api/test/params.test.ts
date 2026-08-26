@@ -18,11 +18,15 @@ describe('form submissions across every tool', () => {
 
   for (const tool of ALL_TOOLS) {
     describe(tool.id, () => {
-      const selects = tool.ui.fields.filter((f) => f.kind === 'select')
+      // Both kinds render as a set of fixed string values a browser submits
+      // verbatim, so both carry the same coercion risk. Adding a new such kind
+      // means adding it here, or it silently drops out of coverage.
+      const CHOICE_KINDS = ['select', 'segmented']
+      const selects = tool.ui.fields.filter((f) => CHOICE_KINDS.includes(f.kind))
 
       for (const field of selects) {
         for (const option of field.options ?? []) {
-          it(`accepts ${field.name}="${option.value}" submitted as a string`, () => {
+          it(`accepts ${field.name}="${option.value}" (${field.kind}) submitted as a string`, () => {
             // Fill in every other field from its default so we isolate this one.
             const body: Record<string, unknown> = {}
             for (const other of tool.ui.fields) {

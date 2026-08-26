@@ -25,6 +25,7 @@ export const removeBackground: Tool<RemoveBackgroundParams> = {
     group: 'modify',
     icon: 'scissors',
     preview: 'none',
+    surface: 'canvas',
     blurb: 'Cut the subject out of a photo and drop the background — on this machine, with a bundled model.',
     fields: [
       {

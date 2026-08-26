@@ -13,6 +13,19 @@
       {% endfor %}
     </select>
 
+  {% elif f.kind == 'segmented' %}
+    {# Radios, not buttons: the choice submits and is keyboard-navigable with
+       no script involved. #}
+    <div class="segmented" role="radiogroup" aria-label="{{ f.label }}">
+      {% for opt in f.options %}
+        <label class="segment{% if opt.value == f.default %} is-active{% endif %}">
+          <input type="radio" name="{{ f.name }}" value="{{ opt.value }}"
+                 {% if opt.value == f.default %}checked{% endif %}>
+          <span>{{ opt.label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+
   {% elif f.kind == 'toggle' %}
     <span class="toggle">
       <input type="checkbox" id="f-{{ f.name }}" name="{{ f.name }}" value="true"
@@ -52,4 +65,29 @@
 
 {% macro statusPill(status) %}
 <span class="pill pill-{{ status }}">{{ status }}</span>
+{% endmacro %}
+
+{# Results carried forward from a previous job. Rendered server-side, so the
+   files are visible and named before any script runs. #}
+{% macro carried(sourceJob, sourceFiles) %}
+{% if sourceFiles and sourceFiles | length %}
+<div class="carried">
+  <input type="hidden" name="fromJob" value="{{ sourceJob.id }}">
+  <div class="carried-head">
+    <span class="carried-badge">Carried over</span>
+    <span class="muted">
+      {{ sourceFiles | length }} result{% if sourceFiles | length != 1 %}s{% endif %}
+      from your {{ sourceJob.toolId }} job — no need to upload again.
+    </span>
+  </div>
+  <ul class="carried-list">
+    {% for f in sourceFiles %}
+      <li>
+        <img src="/jobs/{{ sourceJob.id }}/files/{{ f.id }}" alt="{{ f.name }}" loading="lazy">
+        <span class="carried-name">{{ f.name }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 {% endmacro %}

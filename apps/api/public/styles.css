@@ -541,3 +541,304 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; margin-top: 4px; }
 .check-row input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* ============================================================
+   Interactive crop
+   ============================================================ */
+
+.crop-stage { justify-content: flex-start; }
+.crop-stage.has-files .dropzone { display: none; }
+
+.crop-workspace { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.crop-viewport {
+  position: relative; flex: 1; min-height: 380px;
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; touch-action: none; user-select: none;
+}
+.crop-viewport img {
+  max-width: 100%; max-height: 66vh; display: block;
+  -webkit-user-drag: none; cursor: crosshair;
+}
+
+/* Dim the whole image; the selection punches back through with its own shadow. */
+.crop-shade { position: absolute; pointer-events: none; background: rgba(10, 12, 18, 0.55); }
+
+.crop-selection {
+  position: absolute; cursor: move;
+  outline: 1.5px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(10, 12, 18, 0.55);
+}
+/* Rule-of-thirds guides, the standard aid for placing a crop. */
+.crop-thirds { position: absolute; inset: 0; pointer-events: none; }
+.crop-thirds::before, .crop-thirds::after {
+  content: ''; position: absolute; inset: 0;
+  background-repeat: no-repeat;
+}
+.crop-thirds::before {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.45) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255,255,255,0.45) 1px, transparent 1px);
+  background-position: 33.333% 0, 66.666% 0;
+  background-size: 1px 100%;
+}
+.crop-thirds::after {
+  background-image:
+    linear-gradient(to bottom, rgba(255,255,255,0.45) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.45) 1px, transparent 1px);
+  background-position: 0 33.333%, 0 66.666%;
+  background-size: 100% 1px;
+}
+
+.crop-size {
+  position: absolute; top: -25px; left: 0;
+  padding: 2px 8px; border-radius: 5px;
+  background: var(--accent); color: #fff;
+  font-size: 0.6875rem; font-weight: 700; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.crop-handle {
+  position: absolute; width: 12px; height: 12px;
+  background: #fff; border: 1.5px solid var(--accent); border-radius: 2px;
+}
+.crop-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }
+.crop-handle-n  { top: -7px; left: 50%; margin-left: -6px; cursor: ns-resize; }
+.crop-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
+.crop-handle-e  { top: 50%; right: -7px; margin-top: -6px; cursor: ew-resize; }
+.crop-handle-se { bottom: -7px; right: -7px; cursor: nwse-resize; }
+.crop-handle-s  { bottom: -7px; left: 50%; margin-left: -6px; cursor: ns-resize; }
+.crop-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.crop-handle-w  { top: 50%; left: -7px; margin-top: -6px; cursor: ew-resize; }
+
+.ratio-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.ratio-row .chip-btn { border: 1px solid var(--border); background: var(--surface); }
+.ratio-row .chip-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.crop-filmstrip {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
+}
+.film {
+  flex: none; width: 62px; height: 62px; border-radius: 8px; overflow: hidden;
+  border: 2px solid transparent; cursor: pointer; background: var(--surface-2);
+}
+.film.is-active { border-color: var(--accent); }
+.film img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Segmented control — a two-or-three-way mode switch, built from radios so it
+   works and submits without script. */
+.segmented {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 4px; padding: 4px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+}
+.segment { position: relative; }
+.segment input { position: absolute; opacity: 0; width: 0; height: 0; }
+.segment span {
+  display: block; text-align: center; padding: 8px 10px; border-radius: 7px;
+  font-size: 0.8125rem; font-weight: 600; color: var(--text-muted);
+  cursor: pointer; transition: background 0.14s, color 0.14s;
+}
+.segment span:hover { color: var(--text); }
+.segment input:checked + span { background: var(--accent); color: #fff; }
+.segment input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Before → after size chips on a thumbnail. */
+.thumb-sizes { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 0.625rem; }
+.size-chip {
+  padding: 2px 6px; border-radius: 5px; font-weight: 650;
+  background: var(--surface-2); color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.size-chip.is-after { background: var(--accent); color: #fff; }
+.size-arrow { color: var(--text-muted); }
+
+/* ============================================================
+   HTML to image
+   ============================================================ */
+
+.shot-stage { align-items: stretch; }
+.shot-empty, .shot-busy {
+  flex: 1; display: grid; place-content: center; justify-items: center;
+  text-align: center; gap: 6px; padding: 40px 20px;
+}
+.shot-empty h2, .shot-busy p { margin: 0; }
+.shot-icon { color: var(--accent); }
+.shot-empty p { max-width: 42ch; }
+
+.shot-result { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.shot-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.shot-meta { font-size: 0.8125rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shot-frame {
+  flex: 1; min-height: 0; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+}
+.shot-frame img { width: 100%; display: block; }
+
+.url-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.url-row input { min-width: 0; }
+.url-go { padding: 0 12px; }
+
+.spinner {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2.5px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* ============================================================
+   Shared large-image canvas
+   ============================================================ */
+
+.canvas-stage {
+  position: relative;
+  min-height: 70vh;
+  padding: 22px;
+  /* A neutral, slightly recessed ground so the image reads as the subject
+     rather than competing with the page. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 70%),
+    var(--surface-2);
+}
+.canvas-stage.is-over { border-color: var(--accent); }
+
+/* Batch navigation, floated over the top of the canvas. */
+.canvas-nav {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 4; display: flex; align-items: center; gap: 4px;
+  padding: 5px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.nav-step {
+  width: 30px; height: 30px; border-radius: 8px; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.nav-step:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.nav-select {
+  max-width: 260px; border: 0; background: transparent; color: var(--text);
+  font: inherit; font-size: 0.8125rem; font-weight: 550;
+  padding: 6px 8px; cursor: pointer;
+}
+
+/* Add-more, as a floating action with the loaded count. */
+.canvas-add {
+  position: absolute; top: 16px; right: 16px; z-index: 4;
+  width: 46px; height: 46px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--accent); color: #fff; border: 0;
+  box-shadow: var(--shadow-lg);
+  transition: transform 0.14s, background 0.14s;
+}
+.canvas-add:hover { background: var(--accent-hover); transform: scale(1.06); }
+.canvas-add-count {
+  position: absolute; top: -5px; left: -5px;
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 99px;
+  display: grid; place-items: center;
+  background: var(--text); color: var(--bg);
+  font-size: 0.6875rem; font-weight: 700; line-height: 1;
+}
+
+.canvas-stage .dropzone { flex: 1; display: grid; place-items: center; background: transparent; border: 0; }
+.canvas-stage.has-files .dropzone {
+  /* Once loaded, the dropzone stops taking space but keeps accepting drops. */
+  position: absolute; inset: 0; padding: 0; opacity: 0; pointer-events: none;
+}
+.canvas-stage.has-files .dropzone input { pointer-events: none; }
+
+.canvas-view { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; align-items: center; justify-content: center; }
+.canvas-plate {
+  position: relative; flex: 1; width: 100%; min-height: 0;
+  display: grid; place-items: center;
+}
+.canvas-plate img {
+  max-width: 100%; max-height: 62vh; display: block;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(10, 12, 18, 0.22), 0 2px 6px rgba(10, 12, 18, 0.12);
+  transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), filter 0.2s;
+  transform-origin: center;
+}
+
+.canvas-caption { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.canvas-name { font-size: 0.875rem; font-weight: 550; max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-remove {
+  border: 0; background: none; color: var(--text-muted);
+  font: inherit; font-size: 0.8125rem; cursor: pointer; text-decoration: underline;
+}
+.canvas-remove:hover { color: var(--danger); }
+
+/* Overlay marks drawn over the plate. */
+.ov { position: absolute; pointer-events: none; }
+.mark-single { font-weight: 700; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+.mark-tiled {
+  display: grid; grid-template-columns: repeat(3, 1fr); align-content: space-around;
+  gap: 6px; overflow: hidden; transform: rotate(-24deg); font-weight: 700; text-align: center;
+}
+
+/* ============================================================
+   Polish pass — depth, rhythm and consistent control sizing
+   ============================================================ */
+
+:root {
+  --shadow-lg: 0 4px 6px -1px rgba(16, 18, 26, 0.07), 0 12px 28px -6px rgba(16, 18, 26, 0.16);
+  --control-h: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.45), 0 18px 40px rgba(0, 0, 0, 0.4); }
+}
+
+/* Uniform control height makes a panel read as one system. */
+.field input[type="text"], .field input[type="email"], .field input[type="password"],
+.field input[type="number"], .field input[type="url"], .field select, .btn {
+  min-height: var(--control-h);
+}
+.btn-sm { min-height: 30px; }
+
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.panel { box-shadow: var(--shadow-lg); }
+.tool-card:hover { box-shadow: var(--shadow-lg); }
+
+/* Tabular figures everywhere a number changes in place, so the layout does not
+   jitter as digits change width. */
+.size-chip, .crop-size, .slider-row output, .stage-count strong, .canvas-add-count { font-variant-numeric: tabular-nums; }
+
+.hero h1 { text-wrap: balance; }
+.lede, .tool-blurb, .panel-head p { text-wrap: pretty; }
+
+/* Buttons carry their icon at a consistent optical weight. */
+.btn svg { opacity: 0.85; }
+.btn-primary svg { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* Results carried forward from a previous job. */
+.carried {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.carried-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.875rem; }
+.carried-badge {
+  padding: 2px 8px; border-radius: 5px; background: var(--accent); color: #fff;
+  font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.carried-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 10px; flex-wrap: wrap; }
+.carried-list li { display: flex; align-items: center; gap: 7px; font-size: 0.75rem; }
+.carried-list img {
+  width: 34px; height: 34px; object-fit: cover; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.carried-name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

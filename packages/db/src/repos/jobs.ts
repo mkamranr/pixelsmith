@@ -21,7 +21,7 @@ export interface CreateJobInput {
 }
 
 export interface NewJobFile {
-  role: 'input' | 'output'
+  role: 'input' | 'output' | 'asset'
   name: string
   relPath: string
   mime: string

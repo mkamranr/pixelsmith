@@ -21,6 +21,7 @@
   <input type="hidden" name="_csrf" value="{{ csrfToken }}">
 
   <section class="stage" data-stage>
+    {{ m.carried(sourceJob, sourceFiles) }}
     {% if tool.inputMode != 'none' %}
       <div class="stage-head" data-stage-head hidden>
         <div class="stage-count">
@@ -39,7 +40,8 @@
       </div>
 
       <div class="dropzone" data-dropzone>
-        <input type="file" id="files" name="files" multiple accept="image/*" required data-file-input>
+        <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
         <label for="files" class="dropzone-label">
           <span class="dropzone-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor"

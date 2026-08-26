@@ -33,8 +33,19 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true })
 }, 60_000)
 
+/**
+ * htmlshot always names its output `capture.png` (each job has its own
+ * directory in production), so a test comparing two renders must give each one
+ * its own directory or the second silently overwrites the first.
+ */
+let renderCount = 0
 const render = (params: Record<string, unknown>, settings?: Record<string, unknown>) =>
-  runTool(htmlShot, { inputs: [], outDir, params, ...(settings ? { settings: settings as never } : {}) })
+  runTool(htmlShot, {
+    inputs: [],
+    outDir: join(outDir, `r${renderCount++}`),
+    params,
+    ...(settings ? { settings: settings as never } : {}),
+  })
 
 describe('html to image', () => {
   it('needs no input files at all', () => {
@@ -120,4 +131,86 @@ describe('url rendering is locked down', () => {
     })
     expect((await sharp(out!.path).metadata()).width).toBe(400)
   }, 45_000)
+})
+
+describe('rendering a real page from a URL', () => {
+  /** A page whose assets live on the same origin, plus one third-party image. */
+  let siteUrl: string
+  let site: Server
+  let thirdPartyHits = 0
+
+  beforeAll(async () => {
+    site = createServer((req, res) => {
+      if (req.url === '/style.css') {
+        res.writeHead(200, { 'Content-Type': 'text/css' })
+        res.end('body{background:#101820;margin:0} h1{color:#ffd166;font:700 44px sans-serif}')
+        return
+      }
+      if (req.url === '/tracker.png') {
+        thirdPartyHits++
+        res.writeHead(200, { 'Content-Type': 'image/png' })
+        res.end(Buffer.alloc(0))
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html' })
+      res.end(
+        '<html><head><link rel="stylesheet" href="/style.css"></head>' +
+          '<body><div style="position:fixed;inset:0;background:#fff;z-index:9999" class="cookie-banner">' +
+          'ACCEPT COOKIES</div><h1>SAME ORIGIN STYLED</h1></body></html>',
+      )
+    })
+    await new Promise<void>((r) => site.listen(0, '127.0.0.1', () => r()))
+    siteUrl = `http://127.0.0.1:${(site.address() as { port: number }).port}`
+  }, 30_000)
+
+  afterAll(async () => {
+    await new Promise<void>((r) => site.close(() => r()))
+  })
+
+  it('loads the page and its own stylesheet, so the render is faithful', async () => {
+    const [out] = await render(
+      { source: 'url', url: siteUrl + '/', width: 600, height: 300 },
+      { allowedRenderHosts: ['127.0.0.1'] },
+    )
+    const stats = await sharp(out!.path).stats()
+    // The stylesheet paints a dark background; without it the page is white.
+    expect(stats.channels[2]!.mean).toBeLessThan(200)
+  })
+
+  it('hides fixed overlays when asked, so a cookie banner does not fill the shot', async () => {
+    const withBanner = await render(
+      { source: 'url', url: siteUrl + '/', width: 600, height: 300, hideOverlays: false },
+      { allowedRenderHosts: ['127.0.0.1'] },
+    )
+    const without = await render(
+      { source: 'url', url: siteUrl + '/', width: 600, height: 300, hideOverlays: true },
+      { allowedRenderHosts: ['127.0.0.1'] },
+    )
+    const lightness = async (p: string) => (await sharp(p).stats()).channels[0]!.mean
+    // The banner is opaque white across the whole viewport.
+    expect(await lightness(withBanner[0]!.path)).toBeGreaterThan(await lightness(without[0]!.path))
+  })
+
+  it('blocks third-party requests by default', async () => {
+    thirdPartyHits = 0
+    await render(
+      { source: 'url', url: siteUrl + '/', width: 400, height: 200 },
+      { allowedRenderHosts: ['127.0.0.1'] },
+    )
+    // The page's own assets load; anything off-origin does not.
+    expect(thirdPartyHits).toBe(0)
+  })
+
+  it('accepts a screen-size preset submitted as a string', () => {
+    expect(htmlShot.params.safeParse({ source: 'html', html: '<p>x</p>', width: '1920' }).success).toBe(true)
+  })
+
+  it('still refuses a host that is not allowlisted, even with third-party loading on', async () => {
+    await expect(
+      render(
+        { source: 'url', url: 'http://not-allowed.invalid/', blockThirdParty: false },
+        { allowedRenderHosts: ['127.0.0.1'] },
+      ),
+    ).rejects.toThrow(/allowlist|not permitted/i)
+  })
 })

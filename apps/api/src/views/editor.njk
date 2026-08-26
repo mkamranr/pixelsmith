@@ -1,5 +1,6 @@
 {% extends "layout.njk" %}
 {% import "_icons.njk" as ic %}
+{% import "_macros.njk" as m %}
 {% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
 {% block content %}
 
@@ -18,6 +19,7 @@
   <input type="hidden" name="recipe" value='{"version":1,"ops":[]}' data-recipe>
 
   <section class="stage editor-stage" data-stage>
+    {{ m.carried(sourceJob, sourceFiles) }}
     <div class="stage-head" data-stage-head hidden>
       <div class="stage-count"><strong data-file-count>0</strong> <span data-file-noun>files</span></div>
       <div class="stage-actions">
@@ -27,7 +29,8 @@
     </div>
 
     <div class="dropzone" data-dropzone>
-      <input type="file" id="files" name="files" multiple accept="image/*" required data-file-input>
+      <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
       <label for="files" class="dropzone-label">
         <span class="dropzone-icon" aria-hidden="true">{{ ic.icon('sliders', 34) }}</span>
         <strong>Choose an image to edit</strong>

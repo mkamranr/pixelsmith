@@ -26,6 +26,7 @@ export const crop: Tool<CropParams> = {
     group: 'modify',
     icon: 'crop',
     preview: 'crop',
+    surface: 'crop',
     blurb: 'Cut a rectangle out of an image, or out of a whole batch at once.',
     fields: [
       { name: 'x', label: 'Left (px)', kind: 'number', min: 0, default: 0 },

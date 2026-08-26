@@ -104,7 +104,8 @@ export const jobFiles = sqliteTable(
     jobId: text('job_id')
       .notNull()
       .references(() => jobs.id, { onDelete: 'cascade' }),
-    role: text('role', { enum: ['input', 'output'] }).notNull(),
+    /** `asset` is a supporting file, e.g. a watermark logo: not processed itself. */
+    role: text('role', { enum: ['input', 'output', 'asset'] }).notNull(),
     name: text('name').notNull(),
     /** Path relative to the job directory — never absolute, never user-supplied. */
     relPath: text('rel_path').notNull(),

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { unlink } from 'node:fs/promises'
+import { copyFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type { FastifyInstance } from 'fastify'
@@ -63,10 +63,38 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
     const { toolId } = req.params as { toolId: string }
     if (!ctx.registry.has(toolId)) throw new NotFoundError('Tool')
     const tool = ctx.registry.get(toolId)
-    const q = req.query as { error?: string }
+    const q = req.query as { error?: string; from?: string }
+
+    /**
+     * Chaining: the outputs of a finished job become the inputs here, with no
+     * re-upload. Ownership is checked before anything is revealed — a job id in
+     * a URL must not disclose another user's filenames.
+     */
+    let sourceJob = null
+    let sourceFiles: { id: string; name: string; bytes: number; mime: string }[] = []
+    if (q.from) {
+      const source = await ctx.jobs.getJobForUser(q.from, req.currentUser!.id)
+      if (!source) throw new NotFoundError('Job')
+      sourceJob = source
+      if (source.status === 'done') {
+        sourceFiles = (await ctx.jobs.listFiles(source.id))
+          .filter((f) => f.role === 'output')
+          .map((f) => ({ id: f.id, name: f.name, bytes: f.bytes, mime: f.mime }))
+      }
+    }
+
     // A tool can ask for its own interactive page rather than the generic form.
-    const template = tool.ui.surface === 'editor' ? 'editor.njk' : 'tool.njk'
-    return reply.view(template, pageData(ctx, req, reply, { tool, error: q.error }))
+    const SURFACES: Record<string, string> = {
+      editor: 'editor.njk',
+      crop: 'crop.njk',
+      htmlshot: 'htmlshot.njk',
+      canvas: 'canvas.njk',
+    }
+    const template = SURFACES[tool.ui.surface ?? 'form'] ?? 'tool.njk'
+    return reply.view(
+      template,
+      pageData(ctx, req, reply, { tool, error: q.error, sourceJob, sourceFiles }),
+    )
   })
 
   /**
@@ -86,6 +114,12 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
     const jobId = randomUUID()
     const fields: Record<string, unknown> = {}
     const staged: { name: string; relPath: string }[] = []
+    /**
+     * Supporting files, keyed by the form field that carried them (a watermark
+     * logo, say). Uploaded the same way as inputs but never processed as one,
+     * so they must be told apart here rather than downstream.
+     */
+    const stagedAssets: { name: string; relPath: string }[] = []
 
     /**
      * Validate CSRF from the streamed fields.
@@ -122,23 +156,66 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
           continue
         }
         await ensureCsrf()
-        if (staged.length >= ctx.config.MAX_FILES_PER_JOB) {
+
+        const isAsset = part.fieldname !== 'files'
+        if (!isAsset && staged.length >= ctx.config.MAX_FILES_PER_JOB) {
           throw new TooManyFilesError(ctx.config.MAX_FILES_PER_JOB)
         }
+        if (isAsset && stagedAssets.length >= 4) {
+          throw new BadRequestError('Too many supporting files')
+        }
+
         const { inDir } = await ensurePaths()
         // deriveName strips any directory component the browser may have sent.
         const safeName = deriveName(part.filename || 'upload.bin')
-        const target = join(inDir, `${staged.length}-${safeName}`)
+        const stagedName = isAsset
+          ? `asset-${deriveName(part.fieldname, { ext: 'bin' }).replace(/\.bin$/, '')}-${safeName}`
+          : `${staged.length}-${safeName}`
+
+        const target = join(inDir, stagedName)
         await pipeline(part.file, createWriteStream(target))
         if (part.file.truncated) {
           throw new BadRequestError(`${safeName} is larger than the ${maxMb} MB per-file limit`)
         }
-        staged.push({ name: safeName, relPath: `in/${staged.length}-${safeName}` })
+
+        // An empty file input submits a zero-byte part; that is "nothing
+        // chosen", not a file to reject.
+        const written = await stat(target)
+        if (written.size === 0) {
+          await rm(target, { force: true })
+          continue
+        }
+
+        const record = { name: isAsset ? part.fieldname : safeName, relPath: `in/${stagedName}` }
+        if (isAsset) stagedAssets.push(record)
+        else staged.push(record)
       }
 
       // A generator tool takes no uploads, so the CSRF check would otherwise
       // never run — there is no first file part to trigger it.
       await ensureCsrf()
+
+      // Nothing uploaded? The user may be carrying a previous job's results
+      // forward. Copy them in rather than making them download and re-upload.
+      const fromJob = typeof fields.fromJob === 'string' ? fields.fromJob.trim() : ''
+      if (staged.length === 0 && fromJob) {
+        const source = await ctx.jobs.getJobForUser(fromJob, req.currentUser!.id)
+        if (!source || source.status !== 'done') {
+          throw new BadRequestError('Those earlier results are no longer available')
+        }
+
+        const { inDir } = await ensurePaths()
+        for (const file of await ctx.jobs.listFiles(source.id)) {
+          if (file.role !== 'output') continue
+          if (staged.length >= ctx.config.MAX_FILES_PER_JOB) break
+          // readable() re-checks containment, so a stored path cannot be used
+          // to read outside the source job's directory.
+          const from = await ctx.storage.readable(source.id, file.relPath)
+          const stagedName = `${staged.length}-${file.name}`
+          await copyFile(from, join(inDir, stagedName))
+          staged.push({ name: file.name, relPath: `in/${stagedName}` })
+        }
+      }
 
       if (tool.inputMode !== 'none' && staged.length === 0) {
         throw new BadRequestError('Choose at least one image')
@@ -148,15 +225,16 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
       // rather than discovering it in a worker.
       const { dir } = await ensurePaths()
       const inputs = []
-      for (const file of staged) {
-        const probe = await probeImage(join(dir, file.relPath))
-        inputs.push({
-          role: 'input' as const,
-          name: file.name,
-          relPath: file.relPath,
-          mime: probe.mime,
-          bytes: probe.bytes,
-        })
+      // Supporting files are probed with the same rigour as inputs: a logo is
+      // still an untrusted upload heading for a decoder.
+      for (const [role, list] of [
+        ['input', staged],
+        ['asset', stagedAssets],
+      ] as const) {
+        for (const file of list) {
+          const probe = await probeImage(join(dir, file.relPath))
+          inputs.push({ role, name: file.name, relPath: file.relPath, mime: probe.mime, bytes: probe.bytes })
+        }
       }
 
       const params = ctx.registry.parseParams(toolId, coerceFormParams(tool, fields))

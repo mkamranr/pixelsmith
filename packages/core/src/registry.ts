@@ -11,7 +11,7 @@ export type QueueName = 'image' | 'render' | 'ml'
 export interface ToolField {
   name: string
   label: string
-  kind: 'number' | 'text' | 'textarea' | 'select' | 'toggle' | 'color' | 'range' | 'file'
+  kind: 'number' | 'text' | 'textarea' | 'select' | 'segmented' | 'toggle' | 'color' | 'range' | 'file'
   default?: unknown
   min?: number
   max?: number
@@ -32,7 +32,7 @@ export interface ToolUi {
    * `form` (default) renders the declarative field list. `editor` marks a tool
    * that needs its own interactive page.
    */
-  surface?: 'form' | 'editor'
+  surface?: 'form' | 'canvas' | 'editor' | 'crop' | 'htmlshot'
   /**
    * How the browser should preview this tool's effect on the uploaded
    * thumbnails before anything is submitted. Declared here so the preview logic
@@ -81,6 +81,11 @@ export const DEFAULT_SETTINGS: RuntimeSettings = { allowedRenderHosts: [] }
 
 export interface OpContext<P = unknown> {
   inputs: InputFile[]
+  /**
+   * Supporting files keyed by form field name, e.g. a watermark logo. Distinct
+   * from `inputs`: these are not processed, they are used while processing.
+   */
+  assets: Record<string, string>
   /** Directory the tool must write its outputs into. Already created. */
   outDir: string
   params: P

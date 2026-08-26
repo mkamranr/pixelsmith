@@ -16,6 +16,7 @@ import { registerAdmin } from './routes/admin.js'
 import { registerApi } from './routes/api.js'
 import { registerFiles } from './routes/files.js'
 import { registerPages } from './routes/pages.js'
+import { registerPreview } from './routes/preview.js'
 import { pageData } from './render.js'
 
 const VIEWS = fileURLToPath(new URL('./views', import.meta.url))
@@ -95,6 +96,7 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
   await app.register(authPlugin, { ctx })
 
   await registerApi(app, ctx)
+  await registerPreview(app, ctx)
   await registerPages(app, ctx)
   await registerFiles(app, ctx)
   await registerAdmin(app, ctx)

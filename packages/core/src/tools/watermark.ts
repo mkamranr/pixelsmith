@@ -5,20 +5,33 @@ import { z } from 'zod'
 import { encodeAs, MIME_BY_FORMAT, openImage, RASTER_MIMES } from '../pipeline.js'
 import { uniqueName } from '../naming.js'
 import { escapeXml, FONT_STACK } from '../text.js'
+import { BadInputError } from '../errors.js'
 import type { Tool } from '../registry.js'
 
 const POSITIONS = ['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right'] as const
 
-export const WatermarkParams = z.object({
-  text: z.string().trim().min(1).max(200),
+export const WatermarkParams = z
+  .object({
+    /** Stamp words, or stamp a supplied logo. */
+    mark: z.enum(['text', 'image']).default('text'),
+    text: z.string().trim().max(200).optional(),
+    /** Logo width as a percentage of the base image width. */
+    markScale: z.coerce.number().int().min(2).max(100).default(25),
   position: z.enum(POSITIONS).default('bottom-right'),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default('#ffffff'),
   opacity: z.number().int().min(1).max(100).default(45),
   /** Omitted means scale with the image, so one setting suits any size. */
   fontSize: z.number().int().min(8).max(400).optional(),
-  rotation: z.number().min(-90).max(90).default(0),
-  tiled: z.boolean().default(false),
-})
+    rotation: z.coerce.number().min(-90).max(90).default(0),
+    tiled: z.boolean().default(false),
+  })
+  .superRefine((v, ctx) => {
+    // Text is only meaningful in text mode; requiring it unconditionally would
+    // make an image watermark impossible to submit.
+    if (v.mark === 'text' && (v.text ?? '').trim().length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['text'], message: 'Required' })
+    }
+  })
 
 export type WatermarkParams = z.infer<typeof WatermarkParams>
 
@@ -46,8 +59,9 @@ function placement(position: (typeof POSITIONS)[number], w: number, h: number, p
 /** Build the overlay as an SVG the same size as the image, then composite it. */
 function buildOverlay(params: WatermarkParams, width: number, height: number): Buffer {
   const size = params.fontSize ?? Math.max(14, Math.round(width / 18))
+  const safeText = escapeXml(params.text ?? '')
   const opacity = (params.opacity / 100).toFixed(3)
-  const safe = escapeXml(params.text)
+  const safe = safeText
   const common = `font-family="${FONT_STACK}" font-size="${size}" font-weight="600" fill="${params.color}" fill-opacity="${opacity}"`
 
   let body: string
@@ -75,6 +89,67 @@ function buildOverlay(params: WatermarkParams, width: number, height: number): B
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${body}</svg>`)
 }
 
+/**
+ * Prepare a logo overlay: scaled to the base image, faded to the requested
+ * opacity, and placed or tiled.
+ *
+ * Opacity is applied by multiplying the logo's existing alpha with a solid
+ * tile using the `dest-in` blend. Setting alpha directly would discard the
+ * logo's own transparency and stamp a rectangle.
+ */
+async function buildImageOverlay(
+  markPath: string,
+  params: WatermarkParams,
+  width: number,
+  height: number,
+): Promise<sharp.OverlayOptions> {
+  const targetWidth = Math.max(8, Math.round((width * params.markScale) / 100))
+
+  const scaled = await sharp(markPath)
+    .resize({ width: targetWidth, fit: 'inside', withoutEnlargement: false })
+    .ensureAlpha()
+    .png()
+    .toBuffer()
+
+  const alpha = Math.round((params.opacity / 100) * 255)
+  const faded = await sharp(scaled)
+    .composite([
+      {
+        input: Buffer.from([255, 255, 255, alpha]),
+        raw: { width: 1, height: 1, channels: 4 },
+        tile: true,
+        blend: 'dest-in',
+      },
+    ])
+    .png()
+    .toBuffer()
+
+  if (params.tiled) {
+    return { input: faded, tile: true, blend: 'over' }
+  }
+
+  const meta = await sharp(faded).metadata()
+  const markWidth = meta.width ?? targetWidth
+  const markHeight = meta.height ?? targetWidth
+  const pad = Math.round(width * 0.03)
+
+  const left =
+    params.position === 'center'
+      ? Math.round((width - markWidth) / 2)
+      : params.position.includes('left')
+        ? pad
+        : Math.max(0, width - markWidth - pad)
+
+  const top =
+    params.position === 'center'
+      ? Math.round((height - markHeight) / 2)
+      : params.position.startsWith('top')
+        ? pad
+        : Math.max(0, height - markHeight - pad)
+
+  return { input: faded, left: Math.max(0, left), top: Math.max(0, top) }
+}
+
 export const watermark: Tool<WatermarkParams> = {
   id: 'watermark',
   title: 'Watermark images',
@@ -85,9 +160,42 @@ export const watermark: Tool<WatermarkParams> = {
     group: 'secure',
     icon: 'stamp',
     preview: 'watermark',
+    surface: 'canvas',
     blurb: 'Stamp text across images before they leave your hands — one corner, or tiled across the whole frame.',
     fields: [
-      { name: 'text', label: 'Watermark text', kind: 'text', default: 'CONFIDENTIAL' },
+      {
+        name: 'mark',
+        label: 'Watermark with',
+        kind: 'segmented',
+        default: 'text',
+        options: [
+          { value: 'text', label: 'Add text' },
+          { value: 'image', label: 'Add image' },
+        ],
+      },
+      {
+        name: 'text',
+        label: 'Watermark text',
+        kind: 'text',
+        default: 'CONFIDENTIAL',
+        showWhen: { field: 'mark', equals: ['text'] },
+      },
+      {
+        name: 'markFile',
+        label: 'Watermark image',
+        kind: 'file',
+        showWhen: { field: 'mark', equals: ['image'] },
+        help: 'A PNG with transparency works best.',
+      },
+      {
+        name: 'markScale',
+        label: 'Logo size (% of width)',
+        kind: 'number',
+        min: 2,
+        max: 100,
+        default: 25,
+        showWhen: { field: 'mark', equals: ['image'] },
+      },
       {
         name: 'position',
         label: 'Position',
@@ -104,11 +212,25 @@ export const watermark: Tool<WatermarkParams> = {
       { name: 'tiled', label: 'Tile across the whole image', kind: 'toggle', default: false },
       { name: 'color', label: 'Colour', kind: 'color', default: '#ffffff' },
       { name: 'opacity', label: 'Opacity (%)', kind: 'number', min: 1, max: 100, default: 45 },
-      { name: 'fontSize', label: 'Text size (px)', kind: 'number', min: 8, max: 400, help: 'Leave blank to scale with the image.' },
+      {
+        name: 'fontSize',
+        label: 'Text size (px)',
+        kind: 'number',
+        min: 8,
+        max: 400,
+        help: 'Leave blank to scale with the image.',
+        showWhen: { field: 'mark', equals: ['text'] },
+      },
     ],
   },
 
-  async run({ inputs, outDir, params, onProgress }) {
+  async run({ inputs, outDir, params, assets, onProgress }) {
+    // Resolve the logo once for the whole batch.
+    const markPath = params.mark === 'image' ? assets.markFile : undefined
+    if (params.mark === 'image' && !markPath) {
+      throw new BadInputError('choose a watermark image to stamp, or switch to text')
+    }
+
     const taken = new Set<string>()
     const outputs = []
 
@@ -120,9 +242,12 @@ export const watermark: Tool<WatermarkParams> = {
       const height = (probe.pages && probe.pages > 1 ? probe.pageHeight : probe.height) ?? 0
       const format = probe.format ?? 'png'
 
-      const img = openImage(input.path, { animated: false }).composite([
-        { input: buildOverlay(params, width, height), top: 0, left: 0 },
-      ])
+      const overlay =
+        markPath !== undefined
+          ? await buildImageOverlay(markPath, params, width, height)
+          : { input: buildOverlay(params, width, height), top: 0, left: 0 }
+
+      const img = openImage(input.path, { animated: false }).composite([overlay])
 
       const name = uniqueName(taken, input.name)
       const dest = join(outDir, name)

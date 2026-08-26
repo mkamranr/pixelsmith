@@ -1,0 +1,94 @@
+{% extends "layout.njk" %}
+{% import "_macros.njk" as m %}
+{% import "_icons.njk" as ic %}
+{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block content %}
+
+<nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+{% if not user %}
+  <h1 class="page-title">{{ tool.title }}</h1>
+  <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before processing images.</div>
+{% else %}
+
+<form class="workspace" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data"
+      data-canvas-form data-preview="{{ tool.ui.preview or 'none' }}">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+  <section class="stage canvas-stage" data-stage>
+    {{ m.carried(sourceJob, sourceFiles) }}
+
+    {# Navigation across the batch. Hidden until there is more than one file. #}
+    <div class="canvas-nav" data-nav hidden>
+      <button type="button" class="nav-step" data-step="-1" aria-label="Previous image">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
+      <button type="button" class="nav-step" data-step="1" aria-label="Next image">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <select class="nav-select" data-nav-select aria-label="Choose an image"></select>
+    </div>
+
+    {# Add-more control, with the count of what is loaded. #}
+    <button type="button" class="canvas-add" data-add-more hidden aria-label="Add more images">
+      <span class="canvas-add-count" data-file-count>0</span>
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    </button>
+
+    <div class="dropzone" data-dropzone>
+      <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
+      <label for="files" class="dropzone-label">
+        <span class="dropzone-icon" aria-hidden="true">{{ ic.icon(tool.ui.icon, 38) }}</span>
+        <strong>Choose images</strong>
+        <span class="muted">or drag them here — up to {{ maxFiles }} files, {{ maxUploadMb }} MB each</span>
+      </label>
+    </div>
+
+    <div class="canvas-view" data-view hidden>
+      <div class="canvas-plate" data-plate>
+        <img data-canvas-image alt="Preview">
+        {# Overlays for the live preview are inserted here by script. #}
+      </div>
+      <div class="canvas-caption">
+        <span class="canvas-name" data-canvas-name></span>
+        <span class="thumb-sizes" data-canvas-sizes></span>
+      </div>
+      <button type="button" class="canvas-remove" data-remove-current hidden>Remove this image</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h1><span class="panel-icon">{{ ic.icon(tool.ui.icon, 20) }}</span>{{ tool.title }}</h1>
+      {% if tool.ui.blurb %}<p class="muted">{{ tool.ui.blurb }}</p>{% endif %}
+    </div>
+
+    {% block panelExtras %}{% endblock %}
+
+    {% if tool.ui.fields | length %}
+      <div class="panel-fields">
+        {% for f in tool.ui.fields %}{{ m.field(f) }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="panel-footer">
+      <button class="btn btn-primary btn-block btn-lg" type="submit">
+        {{ tool.title }}
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="hint" data-summary></p>
+    </div>
+  </aside>
+</form>
+
+<script src="/static/canvas.js" defer></script>
+{% endif %}
+{% endblock %}

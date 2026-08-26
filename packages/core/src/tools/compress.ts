@@ -83,6 +83,7 @@ export const compress: Tool<CompressParams> = {
     group: 'optimize',
     icon: 'archive',
     preview: 'format',
+    surface: 'canvas',
     blurb: 'Shrink file size while keeping the picture looking the same.',
     fields: [
       {
