@@ -512,6 +512,31 @@
     })
   }
 
+  /**
+   * Close an open header menu on Escape or an outside click. The <details>
+   * element already opens and closes on its own; this only adds the dismissal
+   * behaviour people expect of a menu.
+   */
+  function wireMenus() {
+    var menus = document.querySelectorAll('[data-menu]')
+    if (!menus.length) return
+
+    document.addEventListener('click', function (event) {
+      Array.prototype.forEach.call(menus, function (menu) {
+        if (menu.open && !menu.contains(event.target)) menu.open = false
+      })
+    })
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return
+      Array.prototype.forEach.call(menus, function (menu) {
+        if (!menu.open) return
+        menu.open = false
+        var trigger = menu.querySelector('summary')
+        if (trigger) trigger.focus()
+      })
+    })
+  }
+
   /** Render server timestamps in the reader's own locale. */
   function localiseTimes() {
     Array.prototype.forEach.call(document.querySelectorAll('time'), function (node) {
@@ -530,5 +555,6 @@
   })
   Array.prototype.forEach.call(document.querySelectorAll('[data-job]'), followJob)
   wireConfirms()
+  wireMenus()
   localiseTimes()
 })()

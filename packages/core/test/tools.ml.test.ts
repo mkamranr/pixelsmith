@@ -15,8 +15,13 @@ let outDir: string
 let server: Server
 let inferenceUrl: string
 
-/** Requests the stub received, so tests can assert what was actually sent. */
-const seen: { path: string; body: Record<string, unknown> }[] = []
+/**
+ * Requests the stub received. `dims` is measured while the stub still holds the
+ * file: an oriented copy lives in a temp directory that is deleted as soon as
+ * the call returns, so a test cannot inspect the path afterwards — nor should
+ * it be able to, since a leftover temp file would be a leak.
+ */
+const seen: { path: string; body: Record<string, unknown>; dims?: { width: number; height: number } }[] = []
 /** Lets a test make the stub misbehave. */
 let nextResponse: { status: number; body: unknown } | null = null
 
@@ -35,7 +40,14 @@ beforeAll(async () => {
     req.on('data', (c) => (raw += c))
     req.on('end', async () => {
       const body = JSON.parse(raw || '{}')
-      seen.push({ path: req.url!, body })
+      const entry: (typeof seen)[number] = { path: req.url!, body }
+      try {
+        const probe = await sharp(String(body.in_path)).metadata()
+        entry.dims = { width: probe.width ?? 0, height: probe.height ?? 0 }
+      } catch {
+        // Some tests post no readable input; dims stays undefined.
+      }
+      seen.push(entry)
 
       if (nextResponse) {
         const { status, body: payload } = nextResponse
@@ -259,5 +271,64 @@ describe('blur faces with operator corrections', () => {
     for (const value of ['40', '70', '90']) {
       expect(blurFaces.params.safeParse({ confidence: value }).success).toBe(true)
     }
+  })
+})
+
+describe('EXIF orientation before inference', () => {
+  /**
+   * Phones store a portrait photo as landscape pixels plus a rotate flag. The
+   * Python sidecar reads with cv2.IMREAD_UNCHANGED, which ignores that flag —
+   * so unless the orientation is baked in first, every such photo comes back
+   * rotated. sharp-based tools already do this via autoOrient().
+   */
+  async function rotatedJpeg(name: string) {
+    const p = join(dir, name)
+    await sharp({ create: { width: 120, height: 60, channels: 3, background: '#3366aa' } })
+      .jpeg()
+      .withMetadata({ orientation: 6 })
+      .toFile(p)
+    return p
+  }
+
+  it('hands the sidecar an image whose rotation is already applied', async () => {
+    const src = await rotatedJpeg('spin.jpg')
+    expect(await sharp(src).metadata()).toMatchObject({ width: 120, height: 60, orientation: 6 })
+
+    await runTool(removeBackground, {
+      inputs: [src], outDir: join(outDir, 'exif'), params: {}, settings: settings(),
+    })
+
+    // Whatever the sidecar was handed must already read as 60x120.
+    expect(lastCall().dims).toEqual({ width: 60, height: 120 })
+  })
+
+  it('applies orientation for upscaling too', async () => {
+    const src = await rotatedJpeg('spin2.jpg')
+    await runTool(upscale, { inputs: [src], outDir: join(outDir, 'exif2'), params: {}, settings: settings() })
+    expect(lastCall().dims).toEqual({ width: 60, height: 120 })
+  })
+
+  it('applies orientation for face redaction too', async () => {
+    const src = await rotatedJpeg('spin3.jpg')
+    await runTool(blurFaces, { inputs: [src], outDir: join(outDir, 'exif3'), params: {}, settings: settings() })
+    expect(lastCall().dims).toEqual({ width: 60, height: 120 })
+  })
+
+  it('passes an already-upright image straight through, with no re-encode', async () => {
+    const src = await fx.writePng(dir, 'upright.png', 90, 40)
+    await runTool(removeBackground, {
+      inputs: [src], outDir: join(outDir, 'plain'), params: {}, settings: settings(),
+    })
+    // Same path, not a copy: the common case must not pay for this.
+    expect(lastCall().body.in_path).toBe(src)
+  })
+
+  it('sizes the upscale limit from the oriented dimensions', async () => {
+    // 60x120 at 4x is 28,800 px — comfortably allowed. The check must not read
+    // the pre-rotation shape and reach a different verdict.
+    const src = await rotatedJpeg('spin4.jpg')
+    await expect(
+      runTool(upscale, { inputs: [src], outDir: join(outDir, 'exif4'), params: { scale: 4 }, settings: settings() }),
+    ).resolves.toHaveLength(1)
   })
 })

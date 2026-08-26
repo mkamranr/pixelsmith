@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { z } from 'zod'
-import { callInference } from '../inference.js'
+import { callInference, withOrientedCopy } from '../inference.js'
 import { deriveName, uniqueName } from '../naming.js'
 import { MIME_BY_FORMAT, RASTER_MIMES } from '../pipeline.js'
 import type { Tool } from '../registry.js'
@@ -59,13 +59,15 @@ export const removeBackground: Tool<RemoveBackgroundParams> = {
       const name = uniqueName(taken, deriveName(input.name, { ext }))
       const dest = join(outDir, name)
 
-      await callInference(settings, '/remove-background', {
-        in_path: input.path,
-        out_path: dest,
-        model: params.model,
-        background: params.background ?? null,
-        feather: params.feather,
-      })
+      await withOrientedCopy(input.path, (orientedPath) =>
+        callInference(settings, '/remove-background', {
+          in_path: orientedPath,
+          out_path: dest,
+          model: params.model,
+          background: params.background ?? null,
+          feather: params.feather,
+        }),
+      )
 
       outputs.push({
         path: dest,

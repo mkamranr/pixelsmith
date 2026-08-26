@@ -64,7 +64,14 @@ def _face_detector_path() -> str:
 
 
 def read_image(path: str) -> np.ndarray:
-    """Read an image, keeping any alpha channel."""
+    """Read an image, keeping any alpha channel.
+
+    IMREAD_UNCHANGED deliberately ignores the EXIF orientation flag, and
+    IMREAD_COLOR (which honours it) would discard alpha. The caller is
+    responsible for handing over pixels that are already upright: the Node
+    worker bakes rotation in before it calls this service, so orientation has a
+    single authority. Do not add a second one here.
+    """
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
     if img is None:
         raise ValueError(f"could not read image: {path}")

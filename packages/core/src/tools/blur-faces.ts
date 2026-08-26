@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { z } from 'zod'
 import { BadInputError } from '../errors.js'
-import { callInference } from '../inference.js'
+import { callInference, withOrientedCopy } from '../inference.js'
 import { deriveName, uniqueName } from '../naming.js'
 import { MIME_BY_FORMAT, RASTER_MIMES } from '../pipeline.js'
 import type { Tool } from '../registry.js'
@@ -133,15 +133,17 @@ export const blurFaces: Tool<BlurFacesParams> = {
       const name = uniqueName(taken, deriveName(input.name, { ext }))
       const dest = join(outDir, name)
 
-      const result = await callInference<RedactResult>(settings, '/blur-faces', {
-        in_path: input.path,
-        out_path: dest,
-        method: params.method,
-        strength: params.strength,
-        confidence: params.confidence / 100,
-        detect: params.detect,
-        extra_regions: regions,
-      })
+      const result = await withOrientedCopy(input.path, (orientedPath) =>
+        callInference<RedactResult>(settings, '/blur-faces', {
+          in_path: orientedPath,
+          out_path: dest,
+          method: params.method,
+          strength: params.strength,
+          confidence: params.confidence / 100,
+          detect: params.detect,
+          extra_regions: regions,
+        }),
+      )
 
       outputs.push({
         path: dest,

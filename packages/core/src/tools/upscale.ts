@@ -3,7 +3,7 @@ import { extname, join } from 'node:path'
 import sharp from 'sharp'
 import { z } from 'zod'
 import { LimitExceededError } from '../errors.js'
-import { callInference } from '../inference.js'
+import { callInference, withOrientedCopy } from '../inference.js'
 import { deriveName, uniqueName } from '../naming.js'
 import { MIME_BY_FORMAT, RASTER_MIMES } from '../pipeline.js'
 import type { Tool } from '../registry.js'
@@ -77,12 +77,14 @@ export const upscale: Tool<UpscaleParams> = {
       const name = uniqueName(taken, deriveName(input.name, { ext }))
       const dest = join(outDir, name)
 
-      await callInference(settings, '/upscale', {
-        in_path: input.path,
-        out_path: dest,
-        scale: params.scale,
-        model: params.model,
-      })
+      await withOrientedCopy(input.path, (orientedPath) =>
+        callInference(settings, '/upscale', {
+          in_path: orientedPath,
+          out_path: dest,
+          scale: params.scale,
+          model: params.model,
+        }),
+      )
 
       outputs.push({
         path: dest,

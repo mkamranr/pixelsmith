@@ -1,10 +1,13 @@
-// Photo editor page.
+// Photo editor.
 //
-// The browser previews edits with CSS transforms and filters — cheap, and it
-// never decodes the full-resolution image. What it produces is a *recipe*: an
-// ordered list of operations the server replays at full size through the same
+// The browser previews edits with CSS filters and an SVG overlay; it never
+// decodes the full-resolution image. What it produces is a RECIPE — an ordered
+// list of operations the server replays at full size through the same
 // primitives the batch tools use. One implementation of each transform, and a
-// 60-megapixel TIFF never has to enter a canvas.
+// 60-megapixel TIFF never enters a canvas.
+//
+// The overlay's viewBox is the image's own pixel dimensions, so the coordinates
+// drawn here are the same numbers the server will use.
 'use strict'
 ;(function () {
   var form = document.querySelector('form[data-editor]')
@@ -13,33 +16,65 @@
   var input = form.querySelector('[data-file-input]')
   var stage = form.querySelector('[data-stage]')
   var canvas = form.querySelector('[data-canvas]')
-  var frame = form.querySelector('[data-frame]')
+  var viewport = form.querySelector('[data-viewport]')
+  var plate = form.querySelector('[data-plate]')
   var img = form.querySelector('[data-preview]')
-  var recipeField = form.querySelector('[data-recipe]')
-  var summary = form.querySelector('[data-op-summary]')
+  var overlay = form.querySelector('[data-overlay]')
   var cropBox = form.querySelector('[data-crop-box]')
   var cropLabel = form.querySelector('[data-crop-label]')
-  var head = form.querySelector('[data-stage-head]')
+  var recipeField = form.querySelector('[data-recipe]')
+  var summary = form.querySelector('[data-op-summary]')
   var hint = form.querySelector('[data-editor-hint]')
+  var formatSelect = form.querySelector('[data-format]')
 
-  /** The whole edit, as plain data. Everything else derives from this. */
-  var state = {
-    rotate: 0,
-    flip: false,
-    flop: false,
-    crop: null, // {x, y, width, height} as fractions of the image
-    brightness: 1,
-    contrast: 1,
-    saturation: 1,
-    blur: 0,
-    sharpen: 0,
-    greyscale: false,
-    text: '',
-    textSize: 0.12,
-    textColor: '#ffffff',
+  var SVG_NS = 'http://www.w3.org/2000/svg'
+
+  function blank() {
+    return {
+      filter: 'none',
+      brightness: 1, contrast: 1, saturation: 1, blur: 0, sharpen: 0,
+      rotate: 0, flip: false, flop: false,
+      crop: null,
+      resize: { width: null, height: null, lock: true },
+      strokes: [], shapes: [], texts: [],
+      frame: { on: false, width: 0.04, color: '#ffffff' },
+      corners: { on: false, radius: 0.08 },
+    }
   }
 
+  var state = blank()
+  var natural = { width: 0, height: 0 }
+  var tab = 'adjust'
+  var ratio = null
+  var shapeKind = 'rect'
+  var zoom = 0        // 0 means fit
   var objectUrl = null
+
+  /* ---------------- history ---------------- */
+
+  var history = [JSON.stringify(state)]
+  var historyAt = 0
+
+  function commit() {
+    var snapshot = JSON.stringify(state)
+    if (snapshot === history[historyAt]) return
+    // A new action after undoing discards the redo branch, as users expect.
+    history = history.slice(0, historyAt + 1)
+    history.push(snapshot)
+    historyAt = history.length - 1
+    render()
+  }
+
+  function travel(delta) {
+    var next = historyAt + delta
+    if (next < 0 || next >= history.length) return
+    historyAt = next
+    state = JSON.parse(history[historyAt])
+    syncControls()
+    render()
+  }
+
+  /* ---------------- files ---------------- */
 
   function loadFiles(files) {
     if (!files || !files.length) return
@@ -48,99 +83,200 @@
     img.src = objectUrl
     canvas.hidden = false
     stage.classList.add('has-files')
-    if (head) head.hidden = false
-    var count = form.querySelector('[data-file-count]')
-    if (count) count.textContent = String(files.length)
-    var noun = form.querySelector('[data-file-noun]')
-    if (noun) noun.textContent = files.length === 1 ? 'image' : 'images (same edits applied to each)'
-    state.crop = null
-    render()
+    state = blank()
+    history = [JSON.stringify(state)]
+    historyAt = 0
+    syncControls()
   }
 
-  input.addEventListener('change', function () {
-    loadFiles(input.files)
-  })
-
-  var addMore = form.querySelector('[data-add-more]')
-  if (addMore) addMore.addEventListener('click', function () { input.click() })
-
-  ;['dragenter', 'dragover'].forEach(function (name) {
-    stage.addEventListener(name, function (e) { e.preventDefault() })
+  input.addEventListener('change', function () { loadFiles(input.files) })
+  ;['dragenter', 'dragover'].forEach(function (n) {
+    stage.addEventListener(n, function (e) { e.preventDefault() })
   })
   stage.addEventListener('drop', function (e) {
     e.preventDefault()
     if (!e.dataTransfer || !e.dataTransfer.files.length) return
     if (typeof DataTransfer !== 'undefined') {
-      var transfer = new DataTransfer()
-      Array.prototype.forEach.call(e.dataTransfer.files, function (f) { transfer.items.add(f) })
-      input.files = transfer.files
+      var t = new DataTransfer()
+      Array.prototype.forEach.call(e.dataTransfer.files, function (f) { t.items.add(f) })
+      input.files = t.files
     }
     loadFiles(e.dataTransfer.files)
   })
 
-  // ---- controls ----
+  img.addEventListener('load', function () {
+    natural = { width: img.naturalWidth, height: img.naturalHeight }
+    overlay.setAttribute('viewBox', '0 0 ' + natural.width + ' ' + natural.height)
+    var rw = form.querySelector('[data-resize="width"]')
+    var rh = form.querySelector('[data-resize="height"]')
+    if (rw && !rw.value) rw.placeholder = String(natural.width)
+    if (rh && !rh.value) rh.placeholder = String(natural.height)
+    render()
+  })
+
+  /* ---------------- tabs ---------------- */
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-tab]'), function (button) {
+    button.addEventListener('click', function () {
+      tab = button.getAttribute('data-tab')
+      Array.prototype.forEach.call(form.querySelectorAll('[data-tab]'), function (b) {
+        var on = b === button
+        b.classList.toggle('is-active', on)
+        b.setAttribute('aria-selected', on ? 'true' : 'false')
+      })
+      Array.prototype.forEach.call(form.querySelectorAll('[data-pane]'), function (pane) {
+        pane.hidden = pane.getAttribute('data-pane') !== tab
+      })
+      viewport.setAttribute('data-mode', tab)
+      render()
+    })
+  })
+
+  /* ---------------- controls ---------------- */
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (control) {
+    control.addEventListener('input', function () {
+      state[control.getAttribute('data-adjust')] = Number(control.value)
+      render()
+    })
+    control.addEventListener('change', commit)
+  })
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (button) {
+    button.addEventListener('click', function () {
+      state.filter = button.getAttribute('data-preset')
+      Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (b) {
+        b.classList.toggle('is-active', b === button)
+      })
+      commit()
+    })
+  })
 
   Array.prototype.forEach.call(form.querySelectorAll('[data-op]'), function (button) {
     button.addEventListener('click', function () {
       var op = button.getAttribute('data-op')
       if (op === 'rotate') {
-        var step = Number(button.getAttribute('data-value'))
-        state.rotate = (((state.rotate + step) % 360) + 360) % 360
-        // A rotation invalidates a crop chosen against the previous orientation.
+        state.rotate = (((state.rotate + Number(button.getAttribute('data-value'))) % 360) + 360) % 360
+        // A crop chosen against the previous orientation no longer applies.
         state.crop = null
       } else if (op === 'flip') {
         state.flip = !state.flip
-        button.classList.toggle('is-active', state.flip)
       } else if (op === 'flop') {
         state.flop = !state.flop
-        button.classList.toggle('is-active', state.flop)
       }
-      render()
+      commit()
     })
   })
 
-  Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (control) {
+  Array.prototype.forEach.call(form.querySelectorAll('[data-resize]'), function (control) {
     control.addEventListener('input', function () {
-      var key = control.getAttribute('data-adjust')
-      state[key] = control.type === 'checkbox' ? control.checked : Number(control.value)
+      var key = control.getAttribute('data-resize')
+      if (key === 'lock') {
+        state.resize.lock = control.checked
+      } else {
+        var value = control.value === '' ? null : Math.max(1, Math.round(Number(control.value)))
+        state.resize[key] = value
+        if (state.resize.lock && value && natural.width) {
+          // Mirror the other dimension so the shown numbers match the result.
+          var other = key === 'width' ? 'height' : 'width'
+          var scale = key === 'width' ? value / natural.width : value / natural.height
+          state.resize[other] = Math.max(1, Math.round((other === 'width' ? natural.width : natural.height) * scale))
+          var mirror = form.querySelector('[data-resize="' + other + '"]')
+          if (mirror) mirror.value = String(state.resize[other])
+        }
+      }
       render()
     })
+    control.addEventListener('change', commit)
   })
 
-  var textInput = form.querySelector('[data-text-input]')
-  var textSize = form.querySelector('[data-text-size]')
-  var textColor = form.querySelector('[data-text-color]')
-  if (textInput) textInput.addEventListener('input', function () { state.text = textInput.value; render() })
-  if (textSize) textSize.addEventListener('input', function () { state.textSize = Number(textSize.value); render() })
-  if (textColor) textColor.addEventListener('input', function () { state.textColor = textColor.value; render() })
-
-  var reset = form.querySelector('[data-reset]')
-  if (reset) {
-    reset.addEventListener('click', function () {
-      state = {
-        rotate: 0, flip: false, flop: false, crop: null,
-        brightness: 1, contrast: 1, saturation: 1, blur: 0, sharpen: 0,
-        greyscale: false, text: '', textSize: 0.12, textColor: '#ffffff',
+  var ratios = form.querySelector('[data-ratios]')
+  if (ratios) {
+    ratios.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-ratio]')
+      if (!button) return
+      Array.prototype.forEach.call(ratios.querySelectorAll('[data-ratio]'), function (b) {
+        b.classList.toggle('is-active', b === button)
+      })
+      var value = button.getAttribute('data-ratio')
+      ratio = value === 'free' ? null : Number(value)
+      if (state.crop && ratio) {
+        state.crop.height = state.crop.width * (natural.width / natural.height) / ratio
+        commit()
       }
-      Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (c) {
-        if (c.type === 'checkbox') c.checked = false
-        else c.value = c.getAttribute('data-adjust') === 'brightness' ||
-          c.getAttribute('data-adjust') === 'contrast' ||
-          c.getAttribute('data-adjust') === 'saturation' ? '1' : '0'
-      })
-      Array.prototype.forEach.call(form.querySelectorAll('.quick-btn'), function (b) {
-        b.classList.remove('is-active')
-      })
-      if (textInput) textInput.value = ''
       render()
     })
   }
 
-  // ---- drag to crop ----
+  var kinds = form.querySelector('[data-shape-kinds]')
+  if (kinds) {
+    kinds.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-shape]')
+      if (!button) return
+      shapeKind = button.getAttribute('data-shape')
+      Array.prototype.forEach.call(kinds.querySelectorAll('[data-shape]'), function (b) {
+        b.classList.toggle('is-active', b === button)
+      })
+    })
+  }
 
-  var dragging = null
+  Array.prototype.forEach.call(form.querySelectorAll('[data-frame]'), function (control) {
+    control.addEventListener('input', function () {
+      var key = control.getAttribute('data-frame')
+      state.frame[key] = key === 'on' ? control.checked : (key === 'width' ? Number(control.value) : control.value)
+      render()
+    })
+    control.addEventListener('change', commit)
+  })
 
-  function pointToFraction(event) {
+  Array.prototype.forEach.call(form.querySelectorAll('[data-corners]'), function (control) {
+    control.addEventListener('input', function () {
+      var key = control.getAttribute('data-corners')
+      state.corners[key] = key === 'on' ? control.checked : Number(control.value)
+      // Transparency needs a format that can hold it.
+      if (state.corners.on && formatSelect && formatSelect.value === 'jpeg') formatSelect.value = 'png'
+      render()
+    })
+    control.addEventListener('change', commit)
+  })
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-clear]'), function (button) {
+    button.addEventListener('click', function () {
+      state[button.getAttribute('data-clear')] = []
+      commit()
+    })
+  })
+
+  var cropClear = form.querySelector('[data-crop-clear]')
+  if (cropClear) cropClear.addEventListener('click', function () { state.crop = null; commit() })
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-history]'), function (button) {
+    button.addEventListener('click', function () {
+      var action = button.getAttribute('data-history')
+      if (action === 'undo') travel(-1)
+      else if (action === 'redo') travel(1)
+      else {
+        state = blank()
+        syncControls()
+        commit()
+      }
+    })
+  })
+
+  Array.prototype.forEach.call(form.querySelectorAll('[data-zoom]'), function (button) {
+    button.addEventListener('click', function () {
+      var value = button.getAttribute('data-zoom')
+      if (value === 'fit') zoom = 0
+      else zoom = Math.min(400, Math.max(25, (zoom || 100) + Number(value) * 25))
+      render()
+    })
+  })
+
+  /* ---------------- canvas interaction ---------------- */
+
+  var drag = null
+
+  function pointAt(event) {
     var box = img.getBoundingClientRect()
     if (!box.width || !box.height) return null
     return {
@@ -149,49 +285,130 @@
     }
   }
 
-  frame.addEventListener('pointerdown', function (event) {
-    if (event.target !== img && event.target !== cropBox) return
-    var start = pointToFraction(event)
-    if (!start) return
-    dragging = start
-    frame.setPointerCapture(event.pointerId)
+  plate.addEventListener('pointerdown', function (event) {
+    if (!natural.width) return
+    var at = pointAt(event)
+    if (!at) return
+
+    if (tab === 'text') {
+      var field = form.querySelector('[data-text-input]')
+      var text = field ? field.value.trim() : ''
+      if (!text) {
+        if (hint) hint.textContent = 'Type some text in the panel first, then click the image.'
+        return
+      }
+      state.texts.push({
+        text: text,
+        x: at.x,
+        y: at.y,
+        size: Number((form.querySelector('[data-text-size]') || {}).value || 0.1),
+        color: (form.querySelector('[data-text-color]') || {}).value || '#ffffff',
+      })
+      commit()
+      return
+    }
+
+    if (tab === 'draw') {
+      drag = {
+        mode: 'draw',
+        stroke: {
+          points: [at],
+          color: (form.querySelector('[data-pen="color"]') || {}).value || '#ff3b30',
+          width: Number((form.querySelector('[data-pen="width"]') || {}).value || 0.012),
+        },
+      }
+      state.strokes.push(drag.stroke)
+    } else if (tab === 'shapes') {
+      drag = {
+        mode: 'shape',
+        start: at,
+        shape: {
+          shape: shapeKind,
+          x: at.x, y: at.y, width: 0, height: 0,
+          color: (form.querySelector('[data-shape-color]') || {}).value || '#ff3b30',
+          fill: !!(form.querySelector('[data-shape-fill]') || {}).checked,
+        },
+      }
+      state.shapes.push(drag.shape)
+    } else if (tab === 'crop') {
+      drag = { mode: 'crop', start: at }
+      state.crop = { x: at.x, y: at.y, width: 0, height: 0 }
+    } else {
+      return
+    }
+
+    plate.setPointerCapture(event.pointerId)
     event.preventDefault()
+    render()
   })
 
-  frame.addEventListener('pointermove', function (event) {
-    if (!dragging) return
-    var now = pointToFraction(event)
-    if (!now) return
-    state.crop = {
-      x: Math.min(dragging.x, now.x),
-      y: Math.min(dragging.y, now.y),
-      width: Math.abs(now.x - dragging.x),
-      height: Math.abs(now.y - dragging.y),
+  plate.addEventListener('pointermove', function (event) {
+    if (!drag) return
+    var at = pointAt(event)
+    if (!at) return
+
+    if (drag.mode === 'draw') {
+      // Sample sparsely: a stroke does not need every pointer event, and the
+      // recipe has a point budget.
+      var last = drag.stroke.points[drag.stroke.points.length - 1]
+      if (Math.abs(at.x - last.x) + Math.abs(at.y - last.y) > 0.004) drag.stroke.points.push(at)
+    } else if (drag.mode === 'shape') {
+      if (drag.shape.shape === 'line') {
+        drag.shape.width = at.x - drag.start.x
+        drag.shape.height = at.y - drag.start.y
+      } else {
+        drag.shape.x = Math.min(drag.start.x, at.x)
+        drag.shape.y = Math.min(drag.start.y, at.y)
+        drag.shape.width = Math.abs(at.x - drag.start.x)
+        drag.shape.height = Math.abs(at.y - drag.start.y)
+      }
+    } else if (drag.mode === 'crop') {
+      state.crop.x = Math.min(drag.start.x, at.x)
+      state.crop.y = Math.min(drag.start.y, at.y)
+      state.crop.width = Math.abs(at.x - drag.start.x)
+      state.crop.height = Math.abs(at.y - drag.start.y)
+      if (ratio && natural.width) {
+        state.crop.height = (state.crop.width * natural.width) / (ratio * natural.height)
+      }
     }
     render()
   })
 
-  frame.addEventListener('pointerup', function () {
-    dragging = null
-    // A stray click should clear the crop rather than leave a sliver.
-    if (state.crop && (state.crop.width < 0.02 || state.crop.height < 0.02)) state.crop = null
-    render()
+  plate.addEventListener('pointerup', function () {
+    if (!drag) return
+    // Discard a click that produced nothing meaningful.
+    if (drag.mode === 'shape' && Math.abs(drag.shape.width) < 0.01 && Math.abs(drag.shape.height) < 0.01) {
+      state.shapes.pop()
+    }
+    if (drag.mode === 'draw' && drag.stroke.points.length < 2) state.strokes.pop()
+    if (drag.mode === 'crop' && (state.crop.width < 0.02 || state.crop.height < 0.02)) state.crop = null
+    drag = null
+    commit()
   })
 
-  // ---- rendering ----
+  /* ---------------- preview ---------------- */
+
+  var CSS_FILTERS = {
+    none: '',
+    mono: 'grayscale(1)',
+    sepia: 'sepia(0.72)',
+    vivid: 'saturate(1.4) contrast(1.08)',
+    warm: 'sepia(0.22) saturate(1.12)',
+    cool: 'saturate(1.06) hue-rotate(12deg)',
+    fade: 'saturate(0.68) brightness(1.06) contrast(0.92)',
+  }
 
   function cssFilter() {
     var parts = []
+    if (state.filter && CSS_FILTERS[state.filter]) parts.push(CSS_FILTERS[state.filter])
     if (state.brightness !== 1) parts.push('brightness(' + state.brightness + ')')
     if (state.contrast !== 1) parts.push('contrast(' + state.contrast + ')')
     if (state.saturation !== 1) parts.push('saturate(' + state.saturation + ')')
-    if (state.greyscale) parts.push('grayscale(1)')
     if (state.blur > 0) {
-      // The preview is displayed smaller than the original, so a blur radius in
-      // source pixels must be scaled down to look the same here.
+      // The preview is smaller than the original, so a radius in source pixels
+      // has to be scaled to look the same here.
       var shown = img.getBoundingClientRect().width || 1
-      var scale = shown / (img.naturalWidth || shown)
-      parts.push('blur(' + (state.blur * scale).toFixed(2) + 'px)')
+      parts.push('blur(' + (state.blur * (shown / (natural.width || shown))).toFixed(2) + 'px)')
     }
     return parts.join(' ')
   }
@@ -201,109 +418,220 @@
     if (state.rotate) parts.push('rotate(' + state.rotate + 'deg)')
     if (state.flop) parts.push('scaleX(-1)')
     if (state.flip) parts.push('scaleY(-1)')
-    if (Math.abs(state.rotate % 180) === 90 && img.naturalWidth) {
-      var ratio = Math.min(img.naturalWidth, img.naturalHeight) / Math.max(img.naturalWidth, img.naturalHeight)
-      parts.push('scale(' + ratio.toFixed(3) + ')')
+    if (Math.abs(state.rotate % 180) === 90 && natural.width) {
+      var r = Math.min(natural.width, natural.height) / Math.max(natural.width, natural.height)
+      parts.push('scale(' + r.toFixed(3) + ')')
     }
     return parts.join(' ')
   }
 
-  /** Build the recipe. Order is fixed and deliberate, not the click order. */
+  function node(name, attrs) {
+    var el = document.createElementNS(SVG_NS, name)
+    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, String(attrs[k])) })
+    return el
+  }
+
+  /** Draw the overlay in the image's own pixel space, as the server will. */
+  function renderOverlay() {
+    overlay.innerHTML = ''
+    if (!natural.width) return
+    var w = natural.width
+    var h = natural.height
+    var short = Math.min(w, h)
+
+    state.shapes.forEach(function (s) {
+      var stroke = Math.max(1, 0.008 * short)
+      if (s.shape === 'line') {
+        overlay.appendChild(node('line', {
+          x1: s.x * w, y1: s.y * h, x2: (s.x + s.width) * w, y2: (s.y + s.height) * h,
+          stroke: s.color, 'stroke-width': stroke, 'stroke-linecap': 'round',
+        }))
+      } else if (s.shape === 'ellipse') {
+        overlay.appendChild(node('ellipse', {
+          cx: (s.x + s.width / 2) * w, cy: (s.y + s.height / 2) * h,
+          rx: (s.width / 2) * w, ry: (s.height / 2) * h,
+          fill: s.fill ? s.color : 'none',
+          stroke: s.fill ? 'none' : s.color, 'stroke-width': stroke,
+        }))
+      } else {
+        overlay.appendChild(node('rect', {
+          x: s.x * w, y: s.y * h, width: s.width * w, height: s.height * h,
+          fill: s.fill ? s.color : 'none',
+          stroke: s.fill ? 'none' : s.color, 'stroke-width': stroke,
+        }))
+      }
+    })
+
+    state.strokes.forEach(function (s) {
+      var d = s.points.map(function (p, i) {
+        return (i === 0 ? 'M' : 'L') + p.x * w + ',' + p.y * h
+      }).join(' ')
+      overlay.appendChild(node('path', {
+        d: d, fill: 'none', stroke: s.color,
+        'stroke-width': Math.max(1, s.width * short),
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      }))
+    })
+
+    state.texts.forEach(function (t) {
+      var el = node('text', {
+        x: t.x * w, y: t.y * h, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-size': Math.max(8, t.size * short), 'font-weight': 700, fill: t.color,
+        'font-family': 'DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif',
+      })
+      el.textContent = t.text
+      overlay.appendChild(el)
+    })
+
+    if (state.frame.on) {
+      var thickness = Math.max(1, state.frame.width * short)
+      overlay.appendChild(node('rect', {
+        x: thickness / 2, y: thickness / 2, width: w - thickness, height: h - thickness,
+        fill: 'none', stroke: state.frame.color, 'stroke-width': thickness,
+      }))
+    }
+  }
+
+  function renderCropBox() {
+    if (!state.crop || !natural.width) {
+      cropBox.hidden = true
+      return
+    }
+    var box = img.getBoundingClientRect()
+    var plateBox = plate.getBoundingClientRect()
+    cropBox.hidden = false
+    cropBox.style.left = box.left - plateBox.left + state.crop.x * box.width + 'px'
+    cropBox.style.top = box.top - plateBox.top + state.crop.y * box.height + 'px'
+    cropBox.style.width = state.crop.width * box.width + 'px'
+    cropBox.style.height = state.crop.height * box.height + 'px'
+    cropLabel.textContent =
+      Math.round(state.crop.width * natural.width) + ' × ' + Math.round(state.crop.height * natural.height)
+  }
+
+  /** Fixed, deliberate order — not the order the user happened to click in. */
   function buildRecipe() {
     var ops = []
     if (state.rotate) ops.push({ op: 'rotate', angle: state.rotate })
     if (state.flop) ops.push({ op: 'flop' })
     if (state.flip) ops.push({ op: 'flip' })
-    // Crop after orientation, because the selection was made on the rotated view.
     if (state.crop && state.crop.width > 0.02 && state.crop.height > 0.02) {
       ops.push({
         op: 'crop',
-        x: Number(state.crop.x.toFixed(4)),
-        y: Number(state.crop.y.toFixed(4)),
-        width: Number(state.crop.width.toFixed(4)),
-        height: Number(state.crop.height.toFixed(4)),
+        x: +state.crop.x.toFixed(4), y: +state.crop.y.toFixed(4),
+        width: +state.crop.width.toFixed(4), height: +state.crop.height.toFixed(4),
       })
     }
+    if (state.resize.width || state.resize.height) {
+      var resize = { op: 'resize' }
+      if (state.resize.width) resize.width = state.resize.width
+      if (state.resize.height) resize.height = state.resize.height
+      ops.push(resize)
+    }
+    if (state.filter && state.filter !== 'none') ops.push({ op: 'filter', preset: state.filter })
     if (state.brightness !== 1) ops.push({ op: 'brightness', value: state.brightness })
     if (state.contrast !== 1) ops.push({ op: 'contrast', value: state.contrast })
     if (state.saturation !== 1) ops.push({ op: 'saturation', value: state.saturation })
-    if (state.greyscale) ops.push({ op: 'greyscale' })
     if (state.blur > 0) ops.push({ op: 'blur', sigma: state.blur })
     if (state.sharpen > 0) ops.push({ op: 'sharpen', sigma: state.sharpen })
-    // Text last, so adjustments do not wash out the caption.
-    if (state.text.trim()) {
+
+    // Annotation sits above the adjustments so it is not washed out by them.
+    state.shapes.forEach(function (s) {
+      if (Math.abs(s.width) < 0.005 && Math.abs(s.height) < 0.005) return
       ops.push({
-        op: 'text',
-        text: state.text.trim(),
-        x: 0.5,
-        y: 0.5,
-        size: state.textSize,
-        color: state.textColor,
-        weight: '700',
+        op: 'shape', shape: s.shape,
+        x: +s.x.toFixed(4), y: +s.y.toFixed(4),
+        width: +s.width.toFixed(4), height: +s.height.toFixed(4),
+        color: s.color, fill: s.fill,
       })
-    }
+    })
+    state.strokes.forEach(function (s) {
+      if (s.points.length < 2) return
+      ops.push({
+        op: 'draw', color: s.color, width: s.width,
+        points: s.points.map(function (p) { return { x: +p.x.toFixed(4), y: +p.y.toFixed(4) } }),
+      })
+    })
+    state.texts.forEach(function (t) {
+      ops.push({ op: 'text', text: t.text, x: +t.x.toFixed(4), y: +t.y.toFixed(4), size: t.size, color: t.color })
+    })
+
+    // Frame and corners last: they trim the finished picture.
+    if (state.frame.on) ops.push({ op: 'frame', width: state.frame.width, color: state.frame.color })
+    if (state.corners.on) ops.push({ op: 'corners', radius: state.corners.radius })
+
     return { version: 1, ops: ops }
   }
 
-  function renderCropBox() {
-    if (!state.crop) {
-      cropBox.hidden = true
-      return
-    }
-    var box = img.getBoundingClientRect()
-    var frameBox = frame.getBoundingClientRect()
-    cropBox.hidden = false
-    cropBox.style.left = box.left - frameBox.left + state.crop.x * box.width + 'px'
-    cropBox.style.top = box.top - frameBox.top + state.crop.y * box.height + 'px'
-    cropBox.style.width = state.crop.width * box.width + 'px'
-    cropBox.style.height = state.crop.height * box.height + 'px'
-
-    if (img.naturalWidth) {
-      cropLabel.textContent =
-        Math.round(state.crop.width * img.naturalWidth) + '×' + Math.round(state.crop.height * img.naturalHeight)
-    }
-  }
-
-  function renderCaption() {
-    var existing = frame.querySelector('.editor-caption')
-    if (existing) existing.remove()
-    if (!state.text.trim()) return
-    var node = document.createElement('div')
-    node.className = 'editor-caption'
-    node.textContent = state.text
-    node.style.color = state.textColor
-    node.style.fontSize = state.textSize * (img.getBoundingClientRect().height || 300) + 'px'
-    frame.appendChild(node)
+  /** Push state back into the controls, after undo or reset. */
+  function syncControls() {
+    Array.prototype.forEach.call(form.querySelectorAll('[data-adjust]'), function (c) {
+      c.value = String(state[c.getAttribute('data-adjust')])
+    })
+    Array.prototype.forEach.call(form.querySelectorAll('[data-preset]'), function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-preset') === state.filter)
+    })
+    var frameOn = form.querySelector('[data-frame="on"]')
+    if (frameOn) frameOn.checked = state.frame.on
+    var cornersOn = form.querySelector('[data-corners="on"]')
+    if (cornersOn) cornersOn.checked = state.corners.on
+    var rw = form.querySelector('[data-resize="width"]')
+    var rh = form.querySelector('[data-resize="height"]')
+    if (rw) rw.value = state.resize.width ? String(state.resize.width) : ''
+    if (rh) rh.value = state.resize.height ? String(state.resize.height) : ''
   }
 
   function render() {
-    img.style.transform = cssTransform()
     img.style.filter = cssFilter()
+    plate.style.transform = cssTransform()
+
+    // Zoom scales the viewport contents; 0 means fit to the available space.
+    plate.style.width = zoom ? natural.width * (zoom / 100) + 'px' : ''
+    plate.style.maxWidth = zoom ? 'none' : '100%'
+    var zoomValue = form.querySelector('[data-zoom-value]')
+    if (zoomValue) zoomValue.textContent = zoom ? zoom + '%' : 'Fit'
 
     Array.prototype.forEach.call(form.querySelectorAll('[data-out]'), function (out) {
       var key = out.getAttribute('data-out')
-      var value = key === 'textSize' ? state.textSize : state[key]
-      out.textContent = typeof value === 'number' ? value.toFixed(key === 'blur' || key === 'sharpen' ? 1 : 2) : value
+      if (key === 'pen') out.textContent = Number((form.querySelector('[data-pen="width"]') || {}).value || 0).toFixed(3)
+      else if (key === 'textSize') out.textContent = Number((form.querySelector('[data-text-size]') || {}).value || 0).toFixed(2)
+      else if (key === 'frameWidth') out.textContent = state.frame.width.toFixed(3)
+      else if (key === 'cornerRadius') out.textContent = state.corners.radius.toFixed(2)
+      else if (typeof state[key] === 'number') out.textContent = state[key].toFixed(key === 'blur' || key === 'sharpen' ? 1 : 2)
     })
 
+    renderOverlay()
     renderCropBox()
-    renderCaption()
 
     var recipe = buildRecipe()
     recipeField.value = JSON.stringify(recipe)
 
     if (summary) {
       summary.textContent = recipe.ops.length
-        ? recipe.ops.length + ' change' + (recipe.ops.length === 1 ? '' : 's') + ' will be applied at full resolution'
+        ? recipe.ops.length + ' change' + (recipe.ops.length === 1 ? '' : 's') + ' applied at full resolution'
         : 'No changes yet.'
     }
+
+    var undo = form.querySelector('[data-history="undo"]')
+    var redo = form.querySelector('[data-history="redo"]')
+    if (undo) undo.disabled = historyAt === 0
+    if (redo) redo.disabled = historyAt >= history.length - 1
+
     if (hint) {
-      hint.textContent = state.crop
-        ? 'Crop selected. Drag again to change it, or click once to clear.'
-        : 'Drag on the image to select a crop area.'
+      var hints = {
+        crop: 'Drag on the image to select an area.',
+        draw: 'Drag on the image to draw.',
+        shapes: 'Drag on the image to place a ' + shapeKind + '.',
+        text: 'Type in the panel, then click the image to place it.',
+      }
+      hint.textContent = hints[tab] || ''
     }
   }
 
-  img.addEventListener('load', render)
+  Array.prototype.forEach.call(form.querySelectorAll('[data-pen], [data-text-size], [data-text-color], [data-shape-color]'), function (c) {
+    c.addEventListener('input', render)
+  })
+
+  viewport.setAttribute('data-mode', tab)
+  window.addEventListener('resize', render)
   render()
 })()

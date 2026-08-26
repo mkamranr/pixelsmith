@@ -1060,3 +1060,142 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   width: 100%; max-width: 84px; height: 34px; padding: 3px;
   border-radius: var(--radius-sm); cursor: pointer;
 }
+
+/* ============================================================
+   Tools menu in the header
+   ============================================================ */
+
+.menu { position: relative; }
+.menu-trigger {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 11px; border-radius: var(--radius-sm);
+  font-size: var(--fs-ui); font-weight: 600; color: var(--text);
+  cursor: pointer; list-style: none; user-select: none;
+}
+/* Hide the native disclosure marker in every engine. */
+.menu-trigger::-webkit-details-marker { display: none; }
+.menu-trigger::marker { content: ''; }
+.menu-trigger:hover { background: var(--surface-2); }
+.menu[open] .menu-trigger { background: var(--accent-soft); color: var(--accent); }
+.menu[open] .menu-trigger > svg { transform: rotate(180deg); }
+.menu-trigger svg { transition: transform 0.16s; }
+
+.menu-panel {
+  position: absolute; top: calc(100% + 10px); left: 0; z-index: 30;
+  /* Five short columns rather than three tall ones: every tool is visible at
+     once, with no scrolling and nothing clipped. */
+  display: grid; grid-template-columns: repeat(5, max-content);
+  gap: var(--s-3) var(--s-5);
+  align-items: start;
+  padding: var(--s-4) var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: min(94vw, 900px);
+}
+/* Anchored to the trigger's right edge so a wide panel stays on screen. */
+@media (min-width: 861px) {
+  .menu-panel { left: auto; right: 0; }
+}
+
+.menu-group-title {
+  margin: 0 0 var(--s-2); font-size: var(--fs-xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+}
+.menu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.menu-list a {
+  display: flex; gap: var(--s-2); align-items: center;
+  padding: 6px var(--s-2); border-radius: var(--radius-sm); color: var(--text);
+  white-space: nowrap;
+}
+.menu-list a:hover { background: var(--accent-soft); text-decoration: none; }
+.menu-list a:hover .menu-name { color: var(--accent); }
+.menu-icon {
+  color: var(--accent); flex: none;
+  display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: var(--radius-sm); background: var(--accent-soft);
+}
+.menu-name { font-size: var(--fs-ui); font-weight: 500; }
+
+@media (max-width: 860px) {
+  /* On a narrow screen the panel becomes an in-flow accordion rather than an
+     overlay that cannot fit. */
+  .menu-panel {
+    position: static; grid-template-columns: 1fr; max-width: none;
+    box-shadow: none; border: 0; padding: var(--s-3) 0; gap: var(--s-4);
+  }
+  .menu-list a { white-space: normal; }
+}
+
+/* ============================================================
+   Photo editor: tabbed toolbar
+   ============================================================ */
+
+.editor { display: flex; flex-direction: column; gap: var(--s-3); margin: var(--s-4) 0 var(--s-8); }
+
+.editor-tabs {
+  display: flex; gap: var(--s-1); overflow-x: auto; padding: var(--s-1);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.editor-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  flex: 1 0 auto; min-width: 84px; padding: var(--s-2) var(--s-3);
+  border: 0; border-radius: var(--radius); background: transparent;
+  color: var(--text-muted); font: inherit; font-size: var(--fs-xs); font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.14s, color 0.14s;
+}
+.editor-tab:hover { background: var(--surface-2); color: var(--text); }
+.editor-tab.is-active { background: var(--accent-soft); color: var(--accent); }
+
+.editor-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 360px);
+  gap: var(--s-4); align-items: stretch;
+}
+.editor-stage { min-height: 60vh; }
+.editor-canvas { flex: 1; display: flex; flex-direction: column; gap: var(--s-2); min-height: 0; }
+.editor-viewport {
+  flex: 1; min-height: 340px; overflow: auto;
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  touch-action: none;
+}
+/* The pointer shape tells the user what a drag will do. */
+.editor-viewport[data-mode="crop"] .editor-plate,
+.editor-viewport[data-mode="shapes"] .editor-plate { cursor: crosshair; }
+.editor-viewport[data-mode="draw"] .editor-plate { cursor: cell; }
+.editor-viewport[data-mode="text"] .editor-plate { cursor: text; }
+
+.editor-plate { position: relative; line-height: 0; transform-origin: center; }
+.editor-plate img { max-width: 100%; max-height: 60vh; display: block; -webkit-user-drag: none; }
+/* Sized to the image so overlay coordinates match the server's exactly. */
+.editor-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.editor-controls {
+  display: flex; flex-direction: column; gap: var(--s-2);
+  border-bottom: 1px solid var(--border); padding-bottom: var(--s-3);
+}
+.zoom-row { display: flex; align-items: center; gap: var(--s-2); }
+.zoom-value {
+  flex: 1; text-align: center; font-size: var(--fs-sm); font-weight: 600;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.history-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--s-2); }
+.history-row .btn { gap: 5px; }
+.editor-pane { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.preset {
+  padding: var(--s-2) 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-muted);
+  font: inherit; font-size: var(--fs-xs); font-weight: 600; cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.preset:hover { color: var(--text); border-color: var(--accent); }
+.preset.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+@media (max-width: 900px) {
+  .editor-body { grid-template-columns: 1fr; }
+}

@@ -1,3 +1,4 @@
+{% import "_icons.njk" as ic %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -23,6 +24,36 @@
     </a>
 
     <nav class="nav" aria-label="Main">
+      {# A disclosure rather than a scripted dropdown: it opens, closes and is
+         keyboard operable with no JavaScript at all. Script only adds
+         outside-click and Escape. #}
+      <details class="menu" data-menu>
+        <summary class="menu-trigger">
+          Tools
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+
+        <div class="menu-panel" role="group" aria-label="All tools">
+          {% for group in groups %}
+            <section class="menu-group">
+              <h2 class="menu-group-title">{{ group.label }}</h2>
+              <ul class="menu-list">
+                {% for tool in group.tools %}
+                  <li>
+                    <a href="/tools/{{ tool.id }}">
+                      <span class="menu-icon">{{ ic.icon(tool.ui.icon, 16) }}</span>
+                      <span class="menu-name">{{ tool.title }}</span>
+                    </a>
+                  </li>
+                {% endfor %}
+              </ul>
+            </section>
+          {% endfor %}
+        </div>
+      </details>
+
       {% if user %}
         <a href="/jobs">My jobs</a>
         {% if isAdmin %}<a href="/admin/users">Users</a>{% endif %}

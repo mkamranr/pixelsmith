@@ -1,8 +1,8 @@
 {% extends "layout.njk" %}
 {% import "_icons.njk" as ic %}
 {% import "_macros.njk" as m %}
-{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
 {% block mainClass %}wrap-wide{% endblock %}
+{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
 {% block content %}
 
 <nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
@@ -15,132 +15,253 @@
 {% else %}
 
 <h1 class="page-title">{{ tool.title }}</h1>
-{% if tool.ui.blurb %}<p class="lede">{{ tool.ui.blurb }}</p>{% endif %}
+<p class="lede">{{ tool.ui.blurb }}</p>
 
-<form class="workspace" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data" data-editor>
+<form class="editor" method="post" action="/tools/{{ tool.id }}" enctype="multipart/form-data" data-editor>
   <input type="hidden" name="_csrf" value="{{ csrfToken }}">
-  {# The recipe is what the server replays at full resolution. #}
+  {# The recipe is the whole edit. The server replays it at full resolution. #}
   <input type="hidden" name="recipe" value='{"version":1,"ops":[]}' data-recipe>
+  {{ m.carried(sourceJob, sourceFiles) }}
 
-  <section class="stage editor-stage" data-stage>
-    {{ m.carried(sourceJob, sourceFiles) }}
-    <div class="stage-head" data-stage-head hidden>
-      <div class="stage-count"><strong data-file-count>0</strong> <span data-file-noun>files</span></div>
-      <div class="stage-actions">
-        <button type="button" class="btn btn-sm" data-add-more>Change image</button>
-        <button type="button" class="btn btn-sm" data-reset>Reset all</button>
-      </div>
-    </div>
-
-    <div class="dropzone" data-dropzone>
-      <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
-             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
-      <label for="files" class="dropzone-label">
-        <span class="dropzone-icon" aria-hidden="true">{{ ic.icon('sliders', 34) }}</span>
-        <strong>Choose an image to edit</strong>
-        <span class="muted">Edits preview here and are applied at full resolution on the server</span>
-      </label>
-    </div>
-
-    <div class="editor-canvas" data-canvas hidden>
-      <div class="editor-frame" data-frame>
-        <img data-preview alt="Edit preview">
-        <div class="crop-box" data-crop-box hidden><span class="crop-label" data-crop-label></span></div>
-      </div>
-      <p class="stage-hint" data-editor-hint>Drag on the image to select a crop area.</p>
-    </div>
-  </section>
-
-  <aside class="panel editor-panel">
-    <div class="panel-head">
-      <h2 class="panel-title"><span class="panel-icon">{{ ic.icon('sliders', 18) }}</span>Adjustments</h2>
-    </div>
-
-    <div class="panel-group">
-      <span class="panel-label">Orientation</span>
-      <div class="quick-row">
-        <button type="button" class="btn quick-btn" data-op="rotate" data-value="-90">
-          {{ ic.icon('rotate-cw', 16) }} Left
-        </button>
-        <button type="button" class="btn quick-btn" data-op="rotate" data-value="90">
-          {{ ic.icon('rotate-cw', 16) }} Right
-        </button>
-        <button type="button" class="btn quick-btn" data-op="flop">Mirror ↔</button>
-        <button type="button" class="btn quick-btn" data-op="flip">Mirror ↕</button>
-      </div>
-    </div>
-
-    <div class="panel-group">
-      <span class="panel-label">Adjust</span>
-      <div class="slider-row">
-        <label for="ed-brightness">Brightness</label>
-        <input type="range" id="ed-brightness" data-adjust="brightness" min="0.2" max="2" step="0.05" value="1">
-        <output data-out="brightness">1.00</output>
-      </div>
-      <div class="slider-row">
-        <label for="ed-contrast">Contrast</label>
-        <input type="range" id="ed-contrast" data-adjust="contrast" min="0.2" max="2" step="0.05" value="1">
-        <output data-out="contrast">1.00</output>
-      </div>
-      <div class="slider-row">
-        <label for="ed-saturation">Saturation</label>
-        <input type="range" id="ed-saturation" data-adjust="saturation" min="0" max="2.5" step="0.05" value="1">
-        <output data-out="saturation">1.00</output>
-      </div>
-      <div class="slider-row">
-        <label for="ed-blur">Blur</label>
-        <input type="range" id="ed-blur" data-adjust="blur" min="0" max="12" step="0.5" value="0">
-        <output data-out="blur">0.0</output>
-      </div>
-      <div class="slider-row">
-        <label for="ed-sharpen">Sharpen</label>
-        <input type="range" id="ed-sharpen" data-adjust="sharpen" min="0" max="6" step="0.5" value="0">
-        <output data-out="sharpen">0.0</output>
-      </div>
-      <label class="check-row">
-        <input type="checkbox" data-adjust="greyscale"> Black and white
-      </label>
-    </div>
-
-    <div class="panel-group">
-      <span class="panel-label">Caption</span>
-      <div class="field">
-        <input type="text" data-text-input placeholder="Text to draw on the image" maxlength="300">
-      </div>
-      <div class="slider-row">
-        <label for="ed-textsize">Size</label>
-        <input type="range" id="ed-textsize" data-text-size min="0.03" max="0.4" step="0.01" value="0.12">
-        <output data-out="textSize">0.12</output>
-      </div>
-      <div class="slider-row">
-        <label for="ed-textcolor">Colour</label>
-        <input type="color" id="ed-textcolor" data-text-color value="#ffffff">
-      </div>
-    </div>
-
-    <div class="panel-group">
-      <span class="panel-label">Output</span>
-      <div class="field">
-        <label for="ed-format">Format</label>
-        <select id="ed-format" name="format">
-          <option value="keep">Keep original</option>
-          <option value="jpeg">JPEG</option>
-          <option value="png">PNG</option>
-          <option value="webp">WebP</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="panel-footer">
-      <button class="btn btn-primary btn-block btn-lg" type="submit">
-        Apply &amp; save
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+  {# ---- tool tabs ---- #}
+  <div class="editor-tabs" role="tablist" aria-label="Editing tools">
+    {% set tabs = [
+      { id: 'adjust',    label: 'Filter & light', icon: 'sliders' },
+      { id: 'resize',    label: 'Resize',         icon: 'scaling' },
+      { id: 'crop',      label: 'Crop',           icon: 'crop' },
+      { id: 'transform', label: 'Transform',      icon: 'rotate-cw' },
+      { id: 'draw',      label: 'Draw',           icon: 'code' },
+      { id: 'text',      label: 'Text',           icon: 'message-square' },
+      { id: 'shapes',    label: 'Shapes',         icon: 'maximize' },
+      { id: 'frame',     label: 'Frame',          icon: 'file-image' },
+      { id: 'corners',   label: 'Corners',        icon: 'scissors' }
+    ] %}
+    {% for t in tabs %}
+      <button type="button" class="editor-tab{% if loop.first %} is-active{% endif %}"
+              role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}"
+              aria-controls="pane-{{ t.id }}" data-tab="{{ t.id }}">
+        {{ ic.icon(t.icon, 19) }}
+        <span>{{ t.label }}</span>
       </button>
-      <p class="hint" data-op-summary>No changes yet.</p>
-    </div>
-  </aside>
+    {% endfor %}
+  </div>
+
+  <div class="editor-body">
+    <section class="stage editor-stage" data-stage>
+      <div class="dropzone" data-dropzone>
+        <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+               {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
+        <label for="files" class="dropzone-label">
+          <span class="dropzone-icon" aria-hidden="true">{{ ic.icon('sliders', 40) }}</span>
+          <strong>Choose an image</strong>
+          <span class="muted">or drag and drop it here</span>
+          <span class="dropzone-meta">Edits preview here and are applied at full resolution on the server</span>
+        </label>
+      </div>
+
+      <div class="editor-canvas" data-canvas hidden>
+        <div class="editor-viewport" data-viewport>
+          {# Zoom scales this wrapper; the overlay scales with the image, so
+             fractional coordinates stay correct at any zoom. #}
+          <div class="editor-plate" data-plate>
+            <img data-preview alt="Edit preview">
+            <svg class="editor-overlay" data-overlay preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div class="crop-box" data-crop-box hidden><span class="crop-label" data-crop-label></span></div>
+          </div>
+        </div>
+        <p class="stage-hint" data-editor-hint></p>
+      </div>
+    </section>
+
+    <aside class="panel editor-panel">
+      {# ---- view controls: zoom and history ---- #}
+      <div class="editor-controls">
+        <div class="zoom-row">
+          <button type="button" class="nav-step" data-zoom="-1" aria-label="Zoom out">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                 stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+          </button>
+          <span class="zoom-value" data-zoom-value>Fit</span>
+          <button type="button" class="nav-step" data-zoom="1" aria-label="Zoom in">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                 stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </button>
+          <button type="button" class="btn btn-sm" data-zoom="fit">Fit</button>
+        </div>
+        <div class="history-row">
+          <button type="button" class="btn btn-sm" data-history="undo" disabled>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/>
+              <path d="M3 13a9 9 0 1 0 3-7"/></svg>
+            Undo
+          </button>
+          <button type="button" class="btn btn-sm" data-history="redo" disabled>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/>
+              <path d="M21 13a9 9 0 1 1-3-7"/></svg>
+            Redo
+          </button>
+          <button type="button" class="btn btn-sm btn-danger" data-history="reset">Reset</button>
+        </div>
+      </div>
+
+      {# ---- panes, one per tab ---- #}
+      <div class="editor-pane" id="pane-adjust" role="tabpanel" data-pane="adjust">
+        <span class="panel-label">Presets</span>
+        <div class="preset-grid" data-presets>
+          {% for p in [
+            {v:'none', l:'Original'}, {v:'mono', l:'Mono'}, {v:'sepia', l:'Sepia'},
+            {v:'vivid', l:'Vivid'}, {v:'warm', l:'Warm'}, {v:'cool', l:'Cool'}, {v:'fade', l:'Fade'}
+          ] %}
+            <button type="button" class="preset{% if loop.first %} is-active{% endif %}" data-preset="{{ p.v }}">{{ p.l }}</button>
+          {% endfor %}
+        </div>
+
+        <span class="panel-label">Light &amp; colour</span>
+        {% for s in [
+          {k:'brightness', l:'Brightness', min:'0.2', max:'2',   step:'0.05', v:'1'},
+          {k:'contrast',   l:'Contrast',   min:'0.2', max:'2',   step:'0.05', v:'1'},
+          {k:'saturation', l:'Saturation', min:'0',   max:'2.5', step:'0.05', v:'1'},
+          {k:'blur',       l:'Blur',       min:'0',   max:'12',  step:'0.5',  v:'0'},
+          {k:'sharpen',    l:'Sharpen',    min:'0',   max:'6',   step:'0.5',  v:'0'}
+        ] %}
+        <div class="slider-row">
+          <label for="ed-{{ s.k }}">{{ s.l }}</label>
+          <input type="range" id="ed-{{ s.k }}" data-adjust="{{ s.k }}"
+                 min="{{ s.min }}" max="{{ s.max }}" step="{{ s.step }}" value="{{ s.v }}">
+          <output data-out="{{ s.k }}">{{ s.v }}</output>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="editor-pane" id="pane-resize" role="tabpanel" data-pane="resize" hidden>
+        <div class="field">
+          <label for="ed-rw">Width (px)</label>
+          <input type="number" id="ed-rw" min="1" data-resize="width">
+        </div>
+        <div class="field">
+          <label for="ed-rh">Height (px)</label>
+          <input type="number" id="ed-rh" min="1" data-resize="height">
+        </div>
+        <label class="check-row"><input type="checkbox" data-resize="lock" checked> <span>Maintain aspect ratio</span></label>
+        <p class="hint">Leave blank to keep the original size.</p>
+      </div>
+
+      <div class="editor-pane" id="pane-crop" role="tabpanel" data-pane="crop" hidden>
+        <span class="panel-label">Aspect ratio</span>
+        <div class="ratio-row" data-ratios>
+          {% for r in [{v:'free',l:'Free'},{v:'1',l:'1:1'},{v:'1.7777',l:'16:9'},{v:'1.3333',l:'4:3'},{v:'0.8',l:'4:5'}] %}
+            <button type="button" class="chip-btn{% if loop.first %} is-active{% endif %}" data-ratio="{{ r.v }}">{{ r.l }}</button>
+          {% endfor %}
+        </div>
+        <p class="hint">Drag on the image to select an area. Drag again to change it.</p>
+        <button type="button" class="btn btn-sm btn-block" data-crop-clear>Clear selection</button>
+      </div>
+
+      <div class="editor-pane" id="pane-transform" role="tabpanel" data-pane="transform" hidden>
+        <span class="panel-label">Rotate</span>
+        <div class="quick-row">
+          <button type="button" class="btn quick-btn" data-op="rotate" data-value="-90">{{ ic.icon('rotate-cw', 16) }} Left</button>
+          <button type="button" class="btn quick-btn" data-op="rotate" data-value="90">{{ ic.icon('rotate-cw', 16) }} Right</button>
+        </div>
+        <span class="panel-label">Mirror</span>
+        <div class="quick-row">
+          <button type="button" class="btn quick-btn" data-op="flop">Left to right ↔</button>
+          <button type="button" class="btn quick-btn" data-op="flip">Top to bottom ↕</button>
+        </div>
+      </div>
+
+      <div class="editor-pane" id="pane-draw" role="tabpanel" data-pane="draw" hidden>
+        <p class="hint">Draw directly on the image with the pointer.</p>
+        <div class="slider-row">
+          <label for="ed-pen">Thickness</label>
+          <input type="range" id="ed-pen" data-pen="width" min="0.003" max="0.06" step="0.002" value="0.012">
+          <output data-out="pen">0.012</output>
+        </div>
+        <div class="slider-row">
+          <label for="ed-pencol">Colour</label>
+          <input type="color" id="ed-pencol" data-pen="color" value="#ff3b30">
+        </div>
+        <button type="button" class="btn btn-sm btn-block" data-clear="strokes">Remove all strokes</button>
+      </div>
+
+      <div class="editor-pane" id="pane-text" role="tabpanel" data-pane="text" hidden>
+        <div class="field">
+          <label for="ed-text">Text</label>
+          <input type="text" id="ed-text" data-text-input maxlength="300" placeholder="Type, then click the image">
+        </div>
+        <div class="slider-row">
+          <label for="ed-tsize">Size</label>
+          <input type="range" id="ed-tsize" data-text-size min="0.02" max="0.4" step="0.01" value="0.1">
+          <output data-out="textSize">0.10</output>
+        </div>
+        <div class="slider-row">
+          <label for="ed-tcol">Colour</label>
+          <input type="color" id="ed-tcol" data-text-color value="#ffffff">
+        </div>
+        <p class="hint">Click the image to place the text. Click again to move it.</p>
+        <button type="button" class="btn btn-sm btn-block" data-clear="texts">Remove all text</button>
+      </div>
+
+      <div class="editor-pane" id="pane-shapes" role="tabpanel" data-pane="shapes" hidden>
+        <span class="panel-label">Shape</span>
+        <div class="ratio-row" data-shape-kinds>
+          {% for k in [{v:'rect',l:'Rectangle'},{v:'ellipse',l:'Ellipse'},{v:'line',l:'Line'}] %}
+            <button type="button" class="chip-btn{% if loop.first %} is-active{% endif %}" data-shape="{{ k.v }}">{{ k.l }}</button>
+          {% endfor %}
+        </div>
+        <label class="check-row"><input type="checkbox" data-shape-fill checked> <span>Filled</span></label>
+        <div class="slider-row">
+          <label for="ed-scol">Colour</label>
+          <input type="color" id="ed-scol" data-shape-color value="#ff3b30">
+        </div>
+        <p class="hint">Drag on the image to place the shape.</p>
+        <button type="button" class="btn btn-sm btn-block" data-clear="shapes">Remove all shapes</button>
+      </div>
+
+      <div class="editor-pane" id="pane-frame" role="tabpanel" data-pane="frame" hidden>
+        <label class="check-row"><input type="checkbox" data-frame="on"> <span>Add a border</span></label>
+        <div class="slider-row">
+          <label for="ed-fw">Thickness</label>
+          <input type="range" id="ed-fw" data-frame="width" min="0.005" max="0.2" step="0.005" value="0.04">
+          <output data-out="frameWidth">0.040</output>
+        </div>
+        <div class="slider-row">
+          <label for="ed-fc">Colour</label>
+          <input type="color" id="ed-fc" data-frame="color" value="#ffffff">
+        </div>
+      </div>
+
+      <div class="editor-pane" id="pane-corners" role="tabpanel" data-pane="corners" hidden>
+        <label class="check-row"><input type="checkbox" data-corners="on"> <span>Round the corners</span></label>
+        <div class="slider-row">
+          <label for="ed-cr">Radius</label>
+          <input type="range" id="ed-cr" data-corners="radius" min="0.01" max="0.5" step="0.01" value="0.08">
+          <output data-out="cornerRadius">0.08</output>
+        </div>
+        <p class="hint">Rounded corners are transparent, so the output is saved as PNG.</p>
+      </div>
+
+      <div class="panel-footer">
+        <div class="field">
+          <label for="ed-format">Save as</label>
+          <select id="ed-format" name="format" data-format>
+            <option value="keep">Same format as the original</option>
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-block btn-lg" type="submit">
+          Save image
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        </button>
+        <p class="hint" data-op-summary>No changes yet.</p>
+      </div>
+    </aside>
+  </div>
 </form>
 
 <script src="/static/editor.js" defer></script>

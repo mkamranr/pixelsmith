@@ -35,9 +35,14 @@ describe('edit recipe validation', () => {
     expect(EditRecipe.safeParse({ version: 99, ops: [] }).success).toBe(false)
   })
 
-  it('caps the number of operations', () => {
-    const ops = Array.from({ length: 300 }, () => ({ op: 'rotate', angle: 90 }))
-    expect(EditRecipe.safeParse({ version: 1, ops }).success).toBe(false)
+  it('caps the number of operations, so a recipe cannot grow without bound', () => {
+    // The cap is 400 — a freehand session legitimately accumulates many
+    // strokes — but it is a cap, and something far beyond it is refused.
+    const many = Array.from({ length: 500 }, () => ({ op: 'rotate', angle: 90 }))
+    expect(EditRecipe.safeParse({ version: 1, ops: many }).success).toBe(false)
+
+    const allowed = Array.from({ length: 400 }, () => ({ op: 'rotate', angle: 90 }))
+    expect(EditRecipe.safeParse({ version: 1, ops: allowed }).success).toBe(true)
   })
 })
 

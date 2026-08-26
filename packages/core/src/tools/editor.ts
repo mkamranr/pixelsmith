@@ -10,6 +10,7 @@ import type { Tool } from '../registry.js'
 
 /** A proportion of the image, so a preview-sized edit maps to any resolution. */
 const fraction = z.coerce.number().min(0).max(1)
+const HEX = z.string().regex(/^#[0-9a-f]{6}$/i)
 const factor = z.coerce.number().min(0.05).max(4)
 
 /**
@@ -37,12 +38,46 @@ const EditOp = z.discriminatedUnion('op', [
   z.object({ op: z.literal('blur'), sigma: z.coerce.number().min(0.3).max(50) }),
   z.object({ op: z.literal('sharpen'), sigma: z.coerce.number().min(0.3).max(10) }),
   z.object({
+    op: z.literal('shape'),
+    shape: z.enum(['rect', 'ellipse', 'line']),
+    x: fraction,
+    y: fraction,
+    width: fraction,
+    height: fraction,
+    color: HEX.default('#ff3b30'),
+    fill: z.boolean().default(true),
+    /** Stroke weight as a fraction of the image's shorter side. */
+    strokeWidth: z.coerce.number().min(0.002).max(0.2).default(0.008),
+  }),
+  z.object({
+    op: z.literal('draw'),
+    /** A freehand stroke, sampled into points. Two is the minimum that draws. */
+    points: z.array(z.object({ x: fraction, y: fraction })).min(2).max(4000),
+    color: HEX.default('#ff3b30'),
+    width: z.coerce.number().min(0.002).max(0.2).default(0.01),
+  }),
+  z.object({
+    op: z.literal('frame'),
+    /** Border thickness as a fraction of the shorter side. */
+    width: z.coerce.number().min(0.005).max(0.3).default(0.04),
+    color: HEX.default('#ffffff'),
+  }),
+  z.object({
+    op: z.literal('corners'),
+    /** Corner radius as a fraction of the shorter side. */
+    radius: z.coerce.number().min(0.01).max(0.5).default(0.08),
+  }),
+  z.object({
+    op: z.literal('filter'),
+    preset: z.enum(['none', 'mono', 'sepia', 'vivid', 'warm', 'cool', 'fade']),
+  }),
+  z.object({
     op: z.literal('text'),
     text: z.string().min(1).max(300),
     x: fraction,
     y: fraction,
     size: z.coerce.number().min(0.01).max(1),
-    color: z.string().regex(/^#[0-9a-f]{6}$/i).default('#ffffff'),
+    color: HEX.default('#ffffff'),
     weight: z.enum(['400', '600', '700']).default('700'),
   }),
 ])
@@ -56,7 +91,7 @@ export const EditRecipe = z.object({
    * something approximate is worse than refusing.
    */
   version: z.literal(1),
-  ops: z.array(EditOp).max(200),
+  ops: z.array(EditOp).max(400),
 })
 
 export type EditRecipe = z.infer<typeof EditRecipe>
@@ -83,6 +118,13 @@ function parseRecipe(raw: string): EditRecipe {
     throw new BadInputError(`the edit recipe is not valid: ${first?.path.join('.')} ${first?.message}`)
   }
   return parsed.data
+}
+
+/** Wrap SVG content in a layer the size of the image, ready to composite. */
+function svgLayer(width: number, height: number, content: string): Buffer {
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${content}</svg>`,
+  )
 }
 
 /**
@@ -140,16 +182,106 @@ async function applyOp(buffer: Buffer, op: EditOp): Promise<Buffer> {
       return img.blur(op.sigma).toBuffer()
     case 'sharpen':
       return img.sharpen({ sigma: op.sigma }).toBuffer()
+    case 'shape': {
+      const short = Math.min(width, height)
+      const stroke = Math.max(1, Math.round(op.strokeWidth * short))
+      const px = {
+        x: op.x * width,
+        y: op.y * height,
+        w: op.width * width,
+        h: op.height * height,
+      }
+
+      let element: string
+      if (op.shape === 'line') {
+        // A line uses width/height as a delta from its origin, so it can be
+        // drawn at any angle rather than only axis-aligned.
+        element =
+          `<line x1="${px.x.toFixed(1)}" y1="${px.y.toFixed(1)}" ` +
+          `x2="${(px.x + px.w).toFixed(1)}" y2="${(px.y + px.h).toFixed(1)}" ` +
+          `stroke="${op.color}" stroke-width="${stroke}" stroke-linecap="round"/>`
+      } else if (op.shape === 'ellipse') {
+        element =
+          `<ellipse cx="${(px.x + px.w / 2).toFixed(1)}" cy="${(px.y + px.h / 2).toFixed(1)}" ` +
+          `rx="${(px.w / 2).toFixed(1)}" ry="${(px.h / 2).toFixed(1)}" ` +
+          (op.fill ? `fill="${op.color}"` : `fill="none" stroke="${op.color}" stroke-width="${stroke}"`) +
+          '/>'
+      } else {
+        element =
+          `<rect x="${px.x.toFixed(1)}" y="${px.y.toFixed(1)}" ` +
+          `width="${px.w.toFixed(1)}" height="${px.h.toFixed(1)}" ` +
+          (op.fill ? `fill="${op.color}"` : `fill="none" stroke="${op.color}" stroke-width="${stroke}"`) +
+          '/>'
+      }
+
+      return img.composite([{ input: svgLayer(width, height, element), top: 0, left: 0 }]).toBuffer()
+    }
+
+    case 'draw': {
+      const stroke = Math.max(1, Math.round(op.width * Math.min(width, height)))
+      const path = op.points
+        .map((point, index) => `${index === 0 ? 'M' : 'L'}${(point.x * width).toFixed(1)},${(point.y * height).toFixed(1)}`)
+        .join(' ')
+      const element =
+        `<path d="${path}" fill="none" stroke="${op.color}" stroke-width="${stroke}" ` +
+        'stroke-linecap="round" stroke-linejoin="round"/>'
+      return img.composite([{ input: svgLayer(width, height, element), top: 0, left: 0 }]).toBuffer()
+    }
+
+    case 'frame': {
+      const thickness = Math.max(1, Math.round(op.width * Math.min(width, height)))
+      // Drawn inside the image so the dimensions do not change. The rect is
+      // inset by half the stroke because SVG strokes straddle the path.
+      const inset = thickness / 2
+      const element =
+        `<rect x="${inset}" y="${inset}" width="${width - thickness}" height="${height - thickness}" ` +
+        `fill="none" stroke="${op.color}" stroke-width="${thickness}"/>`
+      return img.composite([{ input: svgLayer(width, height, element), top: 0, left: 0 }]).toBuffer()
+    }
+
+    case 'corners': {
+      const radius = Math.round(op.radius * Math.min(width, height))
+      // dest-in keeps the image only where the mask is opaque, so the corners
+      // become genuinely transparent rather than painted a background colour.
+      const mask = svgLayer(
+        width,
+        height,
+        `<rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#fff"/>`,
+      )
+      return img
+        .ensureAlpha()
+        .composite([{ input: mask, blend: 'dest-in' }])
+        .png()
+        .toBuffer()
+    }
+
+    case 'filter': {
+      switch (op.preset) {
+        case 'mono':
+          return img.greyscale().toBuffer()
+        case 'sepia':
+          return img.greyscale().tint({ r: 196, g: 154, b: 106 }).toBuffer()
+        case 'vivid':
+          return img.modulate({ saturation: 1.4 }).linear(1.08, -10).toBuffer()
+        case 'warm':
+          return img.tint({ r: 255, g: 226, b: 196 }).toBuffer()
+        case 'cool':
+          return img.tint({ r: 198, g: 222, b: 255 }).toBuffer()
+        case 'fade':
+          return img.modulate({ saturation: 0.68 }).linear(0.88, 26).toBuffer()
+        default:
+          return img.toBuffer()
+      }
+    }
+
     case 'text': {
       const fontSize = Math.max(8, Math.round(op.size * Math.min(width, height)))
-      const overlay = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
-          `<text x="${Math.round(op.x * width)}" y="${Math.round(op.y * height)}" ` +
-          `text-anchor="middle" dominant-baseline="middle" ` +
-          `font-family="${FONT_STACK}" font-size="${fontSize}" font-weight="${op.weight}" ` +
-          `fill="${op.color}">${escapeXml(op.text)}</text></svg>`,
-      )
-      return img.composite([{ input: overlay, top: 0, left: 0 }]).toBuffer()
+      const element =
+        `<text x="${Math.round(op.x * width)}" y="${Math.round(op.y * height)}" ` +
+        'text-anchor="middle" dominant-baseline="middle" ' +
+        `font-family="${FONT_STACK}" font-size="${fontSize}" font-weight="${op.weight}" ` +
+        `fill="${op.color}">${escapeXml(op.text)}</text>`
+      return img.composite([{ input: svgLayer(width, height, element), top: 0, left: 0 }]).toBuffer()
     }
   }
 }
