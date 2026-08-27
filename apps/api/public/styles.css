@@ -1929,3 +1929,58 @@ input.is-driven { display: none; }
 
 .organize-file-remove:hover { background: var(--surface); color: var(--text); }
 .organize-sorts { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+
+/* A blank sheet slipped into the arrangement: no source, nothing to turn. */
+.organize-page.is-blank {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+/* Sits in the gap before its page, revealed on approach. */
+.organize-insert {
+  position: absolute;
+  top: 50%;
+  left: -13px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: -11px;
+  padding: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.organize-page:hover .organize-insert,
+.organize-insert:focus-visible { opacity: 1; }
+
+.organize-append { margin: 0; }
+
+.organize-append button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+  padding: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.organize-append button:hover { border-color: var(--border-strong); color: var(--text); }

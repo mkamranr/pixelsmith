@@ -11,8 +11,8 @@ import type { OutputFile, Tool } from '../registry.js'
 /** PDF page rotation is stored in quarter turns, and nothing else is valid. */
 const QUARTER_TURNS = [0, 90, 180, 270]
 
-/** One page of the result: where it comes from, and which way up. */
-export const PlanEntry = z.object({
+/** A page taken from one of the uploads: where from, and which way up. */
+export const SourcePage = z.object({
   /** Which of the uploaded documents, counted from zero. */
   file: z.coerce.number().int().min(0),
   /** Which page of that document, counted from one. */
@@ -25,7 +25,23 @@ export const PlanEntry = z.object({
     .default(0),
 })
 
+/**
+ * A sheet with nothing on it — a separator before a section, or the back of a
+ * one-sided scan. It has no source, so it cannot be a reference to one.
+ */
+export const BlankPage = z.object({
+  blank: z.literal(true),
+})
+
+/** Blank first, since it is the narrower shape of the two. */
+export const PlanEntry = z.union([BlankPage, SourcePage])
+
 export type PlanEntry = z.infer<typeof PlanEntry>
+
+/** A4, for a blank with nothing before it to take its size from. */
+const A4: [number, number] = [595.28, 841.89]
+
+const isBlank = (entry: PlanEntry): entry is z.infer<typeof BlankPage> => 'blank' in entry
 
 const PlanArray = z.array(PlanEntry).min(1).max(5000)
 
@@ -98,6 +114,15 @@ export const OrganizePdfParams = z
         message: `the arrangement is not valid: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
         path: ['plan'],
       })
+      return
+    }
+
+    if (parsed.data.every(isBlank)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'an arrangement of nothing but blank pages has nothing in it',
+        path: ['plan'],
+      })
     }
   })
 
@@ -139,6 +164,16 @@ export const organizePdf: Tool<OrganizePdfParams> = {
       const opened = new Map<number, PDFDocument>()
 
       for (const [at, entry] of entries.entries()) {
+        if (isBlank(entry)) {
+          // Sized like the page it follows, so a blank does not change the
+          // shape of the document it is slipped into.
+          const before = organised.getPageCount()
+          const size = before > 0 ? organised.getPage(before - 1).getSize() : null
+          organised.addPage(size ? [size.width, size.height] : A4)
+          onProgress?.((at + 1) / entries.length)
+          continue
+        }
+
         const input = inputs[entry.file]
         if (!input) {
           throw new BadInputError(

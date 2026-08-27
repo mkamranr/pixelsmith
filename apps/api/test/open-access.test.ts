@@ -1,35 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { loadConfig } from '../src/config.js'
-import { createContext } from '../src/context.js'
-import { buildServer } from '../src/server.js'
-import { BOUNDARY, cookieJar, csrfFrom, multipart, samplePng } from './helpers/app.js'
-
-/** An app with authentication switched off — the default. */
-async function openApp() {
-  const dir = await mkdtemp(join(tmpdir(), 'pixelsmith-open-'))
-  const config = loadConfig({
-    NODE_ENV: 'test',
-    DATA_DIR: dir,
-    COOKIE_SECRET: 'x'.repeat(48),
-    QUEUE_DRIVER: 'inline',
-    LOG_LEVEL: 'silent',
-  } as NodeJS.ProcessEnv)
-
-  const ctx = await createContext(config)
-  const app = await buildServer(ctx)
-  await app.ready()
-  return {
-    app, ctx, dir,
-    async close() {
-      await app.close()
-      await ctx.shutdown()
-      await rm(dir, { recursive: true, force: true })
-    },
-  }
-}
+import { BOUNDARY, cookieJar, csrfFrom, multipart, openApp, samplePng } from './helpers/app.js'
 
 let h: Awaited<ReturnType<typeof openApp>>
 beforeEach(async () => { h = await openApp() })

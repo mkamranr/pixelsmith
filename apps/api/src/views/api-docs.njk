@@ -3,36 +3,157 @@
 {% block content %}
 <h1 class="page-title">REST API</h1>
 <p class="lede">
-  Scriptable access to the same tools the web pages use. Authenticate with a session
-  cookie, or an API key in an <code>Authorization: Bearer</code> header.
+  Scriptable access to every tool the web pages use — images and PDFs alike.
+  Nothing here talks to the outside world: the API is the same server, on the
+  same machine, as the pages.
+</p>
+
+<h2 class="section-title">Getting in</h2>
+<p>
+  {% if openAccess %}
+    This deployment is open, so no credentials are needed. Identity still
+    matters — a job belongs to whoever created it — so <strong>keep
+    cookies</strong> between requests: the first call sets one, and the calls
+    that read the job back need it. In curl, that is <code>-c</code> and
+    <code>-b</code> with a jar file.
+  {% else %}
+    This deployment uses accounts, so sign in first and keep the session cookie.
+    An unauthenticated call is answered with <code>401</code> and JSON.
+  {% endif %}
+</p>
+<p class="hint">
+  There is no API-key mechanism yet. The table exists in the database but
+  nothing issues or verifies keys, so cookies are the only way in — worth
+  knowing before you write a client around it.
 </p>
 
 <h2 class="section-title">Endpoints</h2>
 <table class="table">
   <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
   <tbody>
-    <tr><td><code>GET</code></td><td><code>/healthz</code></td><td>Liveness, and which queue driver is active.</td></tr>
-    <tr><td><code>GET</code></td><td><code>/api/tools</code></td><td>Every tool with its parameters.</td></tr>
-    <tr><td><code>GET</code></td><td><code>/api/tools/{id}</code></td><td>One tool's parameter schema.</td></tr>
-    <tr><td><code>POST</code></td><td><code>/tools/{id}</code></td><td>Multipart upload; creates a job.</td></tr>
-    <tr><td><code>GET</code></td><td><code>/api/jobs/{id}</code></td><td>Job status and output list.</td></tr>
-    <tr><td><code>GET</code></td><td><code>/api/jobs/{id}/events</code></td><td>Progress as server-sent events.</td></tr>
-    <tr><td><code>GET</code></td><td><code>/jobs/{id}/files/{fileId}</code></td><td>Download one result.</td></tr>
-    <tr><td><code>GET</code></td><td><code>/jobs/{id}/download</code></td><td>Download all results as a zip.</td></tr>
+    <tr data-api-endpoint="GET /healthz">
+      <td><code>GET</code></td><td><code>/healthz</code></td>
+      <td>Liveness, and which queue driver is active.</td>
+    </tr>
+    <tr data-api-endpoint="GET /api/tools">
+      <td><code>GET</code></td><td><code>/api/tools</code></td>
+      <td>Every tool: family, what it accepts, and its settings.</td>
+    </tr>
+    <tr data-api-endpoint="GET /api/tools/{id}">
+      <td><code>GET</code></td><td><code>/api/tools/{id}</code></td>
+      <td>One tool's settings, in detail.</td>
+    </tr>
+    <tr data-api-endpoint="POST /api/jobs">
+      <td><code>POST</code></td><td><code>/api/jobs</code></td>
+      <td>Create a job. Multipart. Answers <code>202</code> with the job id.</td>
+    </tr>
+    <tr data-api-endpoint="GET /api/jobs/{id}">
+      <td><code>GET</code></td><td><code>/api/jobs/{id}</code></td>
+      <td>Status, and the outputs once it is done.</td>
+    </tr>
+    <tr data-api-endpoint="GET /api/jobs/{id}/events">
+      <td><code>GET</code></td><td><code>/api/jobs/{id}/events</code></td>
+      <td>Progress as server-sent events, if you would rather not poll.</td>
+    </tr>
+    <tr data-api-endpoint="GET /jobs/{id}/files/{fileId}">
+      <td><code>GET</code></td><td><code>/jobs/{id}/files/{fileId}</code></td>
+      <td>Download one result. The ids come from the status response.</td>
+    </tr>
+    <tr data-api-endpoint="GET /jobs/{id}/download">
+      <td><code>GET</code></td><td><code>/jobs/{id}/download</code></td>
+      <td>Download every result as a zip.</td>
+    </tr>
   </tbody>
 </table>
 
-<h2 class="section-title">Available tools</h2>
-<ul class="plain-list">
-{% for group in groups %}{% for t in group.tools %}
-  <li><code>{{ t.id }}</code> — {{ t.title }}</li>
-{% endfor %}{% endfor %}
-</ul>
+<h2 class="section-title">Creating a job</h2>
+<p>
+  One <code>multipart/form-data</code> request to <code>/api/jobs</code>:
+</p>
+<table class="table">
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>tool</code></td>
+      <td>Which tool to run, by id. Required.</td>
+    </tr>
+    <tr>
+      <td><code>files</code></td>
+      <td>
+        The documents or pictures to work on — repeat the field for several.
+        Up to {{ maxFiles }} per job, {{ maxUploadMb }} MB each. Omit it for a
+        tool that builds its result from settings alone.
+      </td>
+    </tr>
+    <tr>
+      <td>any setting</td>
+      <td>
+        A field per setting, named as <code>/api/tools/{id}</code> reports it.
+        Unrecognised fields are ignored; invalid ones are refused with a reason.
+      </td>
+    </tr>
+    <tr>
+      <td>a named file field</td>
+      <td>
+        Supporting files go in the field the tool names for them —
+        <code>signatureFile</code> for signing, <code>markFile</code> for an
+        image watermark. They are not treated as inputs.
+      </td>
+    </tr>
+    <tr>
+      <td><code>fromJob</code></td>
+      <td>
+        A finished job's id, to carry its results straight in instead of
+        downloading and re-uploading them.
+      </td>
+    </tr>
+  </tbody>
+</table>
 
-<h2 class="section-title">Example</h2>
-<pre class="code"><code>curl -sS -X POST http://localhost:8080/tools/resize \
-  -H "Authorization: Bearer $PIXELSMITH_KEY" \
-  -F "files=@photo.jpg" \
-  -F "mode=pixels" -F "width=800"</code></pre>
-<p class="hint">The response redirects to the job page; poll <code>/api/jobs/{id}</code> for completion.</p>
+<p>No CSRF token is involved: that belongs to the browser form, which has a page to take one from.</p>
+
+<h2 class="section-title">When something is wrong</h2>
+<p>
+  Every failure answers with JSON shaped
+  <code>{"error": {"code", "message"}}</code>. The message is meant to be shown
+  to a person as it is.
+</p>
+<table class="table">
+  <thead><tr><th>Status</th><th>Means</th></tr></thead>
+  <tbody>
+    <tr><td><code>400</code></td><td>A setting is invalid, or a required file is missing.</td></tr>
+    <tr><td><code>401</code></td><td>Credentials are needed on this deployment.</td></tr>
+    <tr><td><code>404</code></td><td>No such tool, or no such job for you.</td></tr>
+    <tr><td><code>413</code></td><td>Too large, or too many files.</td></tr>
+    <tr><td><code>415</code></td><td>The file is not a sort this tool reads.</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section-title">An example, start to finish</h2>
+<pre class="code"><code># Create the job, keeping cookies so the result can be read back.
+JOB=$(curl -sS -c jar -b jar -X POST http://localhost:8080/api/jobs \
+  -F "tool=merge-pdf" \
+  -F "files=@first.pdf" -F "files=@second.pdf" \
+  -F "filename=joined" | jq -r .id)
+
+# Wait for it.
+until curl -sS -c jar -b jar "http://localhost:8080/api/jobs/$JOB" \
+  | jq -e '.status == "done" or .status == "failed"' >/dev/null; do sleep 1; done
+
+# Take the result.
+URL=$(curl -sS -c jar -b jar "http://localhost:8080/api/jobs/$JOB" | jq -r '.outputs[0].url')
+curl -sS -c jar -b jar "http://localhost:8080$URL" -o joined.pdf</code></pre>
+
+<h2 class="section-title">Every tool</h2>
+{% for family in families %}
+  <h3 class="section-subtitle">{{ family.title }}</h3>
+  <ul class="plain-list">
+    {% for group in family.groups %}{% for t in group.tools %}
+      <li data-api-tool="{{ t.id }}">
+        <code>{{ t.id }}</code> — {{ t.title }}
+        <a class="muted" href="/api/tools/{{ t.id }}">settings</a>
+      </li>
+    {% endfor %}{% endfor %}
+  </ul>
+{% endfor %}
 {% endblock %}

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { STICKERS, STICKER_CATEGORIES } from '@pixelsmith/core'
 import type { AppContext } from '../context.js'
 import { NotFoundError } from '../errors.js'
+import { intakeJob } from '../intake.js'
 import { zodToFields } from '../schema-doc.js'
 
 /**
@@ -27,9 +28,12 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
     tools: ctx.registry.list().map((t) => ({
       id: t.id,
       title: t.title,
+      family: t.family,
       group: t.ui.group,
       blurb: t.ui.blurb ?? null,
       accepts: t.accepts,
+      /** 'none' means the tool builds its output from settings alone. */
+      inputMode: t.inputMode ?? 'files',
       params: zodToFields(t),
     })),
   }))
@@ -38,7 +42,40 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
     const { toolId } = req.params as { toolId: string }
     if (!ctx.registry.has(toolId)) throw new NotFoundError('Tool')
     const t = ctx.registry.get(toolId)
-    return { id: t.id, title: t.title, group: t.ui.group, accepts: t.accepts, params: zodToFields(t) }
+    return {
+      id: t.id,
+      title: t.title,
+      family: t.family,
+      group: t.ui.group,
+      blurb: t.ui.blurb ?? null,
+      accepts: t.accepts,
+      inputMode: t.inputMode ?? 'files',
+      params: zodToFields(t),
+    }
+  })
+
+  /**
+   * Create a job.
+   *
+   * One multipart request: `tool` names the tool, `files` carries the inputs,
+   * and every other field is one of that tool's settings. Supporting files — a
+   * signature, a watermark image — go in the field the tool declares for them.
+   *
+   * The same intake as the browser form, deliberately, so a file accepted in one
+   * is accepted in the other and the refusals read the same. No CSRF token is
+   * required: a script has no page to take one from.
+   */
+  app.post('/api/jobs', { preHandler: app.requireUser }, async (req, reply) => {
+    const { jobId, toolId } = await intakeJob({ app, ctx, req, reply, csrf: false })
+    const job = await ctx.jobs.getJobForUser(jobId, req.currentUser!.id)
+
+    return reply.status(202).send({
+      id: jobId,
+      tool: toolId,
+      status: job?.status ?? 'queued',
+      statusUrl: `/api/jobs/${jobId}`,
+      eventsUrl: `/api/jobs/${jobId}/events`,
+    })
   })
 
   app.get('/api/jobs/:id', { preHandler: app.requireUser }, async (req) => {

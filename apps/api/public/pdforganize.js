@@ -74,6 +74,7 @@
       planField.value = sheets.length
         ? JSON.stringify(
             sheets.map(function (sheet) {
+              if (sheet.blank) return { blank: true }
               return { file: files.indexOf(sheet.source), page: sheet.page, rotate: sheet.rotate }
             })
           )
@@ -109,6 +110,7 @@
   // ---- the pages ----------------------------------------------------------
 
   function thumbFor(sheet) {
+    if (sheet.blank) return null
     var cached = sheet.source.thumbs[sheet.page]
     if (!cached) return null
     // One canvas cannot be in two places, so a repeated page gets a copy.
@@ -137,9 +139,9 @@
 
     sheets.forEach(function (sheet, index) {
       var item = document.createElement('li')
-      item.className = 'organize-page'
+      item.className = 'organize-page' + (sheet.blank ? ' is-blank' : '')
       item.draggable = true
-      item.style.setProperty('--tint', sheet.source.tint)
+      if (!sheet.blank) item.style.setProperty('--tint', sheet.source.tint)
 
       var plate = document.createElement('div')
       plate.className = 'organize-plate'
@@ -152,24 +154,43 @@
 
       var actions = document.createElement('div')
       actions.className = 'organize-actions'
-      var turn = iconButton('Turn this page', '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>')
-      turn.addEventListener('click', function () {
-        sheet.rotate = (sheet.rotate + 90) % 360
-        sync()
-        renderGrid()
-      })
+
+      // Nothing on a blank sheet to turn.
+      if (!sheet.blank) {
+        var turn = iconButton('Turn this page', '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>')
+        turn.addEventListener('click', function () {
+          sheet.rotate = (sheet.rotate + 90) % 360
+          sync()
+          renderGrid()
+        })
+        actions.appendChild(turn)
+      }
+
       var drop = iconButton('Remove this page', '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>')
       drop.addEventListener('click', function () {
         sheets.splice(index, 1)
         sync()
         renderGrid()
       })
-      actions.appendChild(turn)
       actions.appendChild(drop)
+
+      // Slip a blank in ahead of this page — a separator, or the back of a
+      // one-sided scan.
+      var before = document.createElement('button')
+      before.type = 'button'
+      before.className = 'organize-insert'
+      before.setAttribute('data-organize-insert', String(index))
+      before.setAttribute('aria-label', 'Insert a blank page before this one')
+      before.title = 'Insert a blank page here'
+      before.innerHTML =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+        'stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>'
+      before.addEventListener('click', function () { insertBlank(index) })
+      item.appendChild(before)
 
       var label = document.createElement('span')
       label.className = 'organize-label'
-      label.textContent = sheet.source.letter + sheet.page
+      label.textContent = sheet.blank ? 'Blank' : sheet.source.letter + sheet.page
 
       item.appendChild(plate)
       item.appendChild(actions)
@@ -201,7 +222,29 @@
       grid.appendChild(item)
     })
 
+    if (sheets.length) {
+      var append = document.createElement('li')
+      append.className = 'organize-append'
+      var button = document.createElement('button')
+      button.type = 'button'
+      button.setAttribute('data-organize-append', '')
+      button.setAttribute('aria-label', 'Add a blank page at the end')
+      button.innerHTML =
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+        'stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>' +
+        '<span>Blank page</span>'
+      button.addEventListener('click', function () { insertBlank(sheets.length) })
+      append.appendChild(button)
+      grid.appendChild(append)
+    }
+
     sync()
+  }
+
+  function insertBlank(at) {
+    if (sheets.length >= MAX_SHEETS) return
+    sheets.splice(at, 0, { blank: true, source: null, page: 0, rotate: 0 })
+    renderGrid()
   }
 
   function move(from, to) {

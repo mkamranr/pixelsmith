@@ -134,3 +134,33 @@ export async function signIn(
 
   return { cookie: cookieJar(form, res), status: res.statusCode }
 }
+
+/**
+ * An app with authentication switched off, which is the product default. The
+ * API matters most in this mode: an isolated network with no accounts is the
+ * deployment this was built for.
+ */
+export async function openApp() {
+  const dir = await mkdtemp(join(tmpdir(), 'pixelsmith-open-'))
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    DATA_DIR: dir,
+    COOKIE_SECRET: 'x'.repeat(48),
+    QUEUE_DRIVER: 'inline',
+    LOG_LEVEL: 'silent',
+  } as NodeJS.ProcessEnv)
+
+  const ctx = await createContext(config)
+  const app = await buildServer(ctx)
+  await app.ready()
+  return {
+    app,
+    ctx,
+    dir,
+    async close() {
+      await app.close()
+      await ctx.shutdown()
+      await rm(dir, { recursive: true, force: true })
+    },
+  }
+}

@@ -126,3 +126,53 @@ describe('organising pages across several documents', () => {
     expect(organizePdf.params.safeParse({ plan: plan([{ file: 0, page: 1 }]) }).success).toBe(true)
   })
 })
+
+/**
+ * A blank sheet slipped into the stack — a separator before each section, or
+ * the back of a one-sided scan. It has no source page, so the plan carries it
+ * as a blank rather than as a reference to something.
+ */
+describe('inserting a blank page', () => {
+  it('puts an empty page exactly where the plan says', async () => {
+    const outs = await run([alpha], {
+      plan: plan([{ file: 0, page: 1 }, { blank: true }, { file: 0, page: 2 }]),
+    })
+
+    const labels = await labelsOf(outs[0]!.path)
+    expect(labels).toEqual(['A1', '', 'A2'])
+  })
+
+  it('matches the size of the page it follows, so the document stays even', async () => {
+    const wide = await labelled('wide.pdf', ['W1'])
+    // labelled() makes 300x400 pages; a blank should follow suit rather than
+    // dropping an A4 sheet into a document of a different shape.
+    const outs = await run([wide], { plan: plan([{ file: 0, page: 1 }, { blank: true }]) })
+
+    const doc = await PDFDocument.load(await readFile(outs[0]!.path))
+    const first = doc.getPage(0).getSize()
+    const second = doc.getPage(1).getSize()
+    expect(Math.round(second.width)).toBe(Math.round(first.width))
+    expect(Math.round(second.height)).toBe(Math.round(first.height))
+  })
+
+  it('falls back to A4 when the blank comes first, having nothing to match', async () => {
+    const outs = await run([alpha], { plan: plan([{ blank: true }, { file: 0, page: 1 }]) })
+
+    const doc = await PDFDocument.load(await readFile(outs[0]!.path))
+    const size = doc.getPage(0).getSize()
+    expect(Math.round(size.width)).toBe(595)
+    expect(Math.round(size.height)).toBe(842)
+  })
+
+  it('accepts several blanks', async () => {
+    const outs = await run([alpha], {
+      plan: plan([{ blank: true }, { blank: true }, { file: 0, page: 1 }]),
+    })
+    expect(await labelsOf(outs[0]!.path)).toEqual(['', '', 'A1'])
+  })
+
+  it('will not build a document of nothing but blanks', () => {
+    // Every page empty is not an arrangement, it is a mistake.
+    expect(organizePdf.params.safeParse({ plan: plan([{ blank: true }]) }).success).toBe(false)
+  })
+})
