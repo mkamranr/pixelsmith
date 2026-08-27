@@ -9,6 +9,7 @@ import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
 import { rotatePdf } from './pdf-rotate.js'
 import { pdfCrop } from './pdf-crop.js'
+import { htmlToPdf } from './pdf-from-html.js'
 import { imagesToPdf } from './pdf-from-images.js'
 import { pdfPageNumbers } from './pdf-page-numbers.js'
 import { pdfToImage } from './pdf-to-image.js'
@@ -49,11 +50,13 @@ export const ALL_TOOLS = [
   pdfPageNumbers,
   pdfWatermark,
   pdfCrop,
+  htmlToPdf,
 ]
 
 export const registry = createRegistry(ALL_TOOLS)
 
 export {
+  htmlToPdf,
   imagesToPdf,
   mergePdf,
   pdfCrop,

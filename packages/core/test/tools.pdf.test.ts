@@ -52,13 +52,20 @@ describe('the two tool families', () => {
   })
 
   it('gives every PDF tool a coherent input type', () => {
-    // A PDF tool either works on documents, or converts something else into
-    // one. Stated as a rule rather than a list of exempt names, so it keeps
-    // holding as tools are added.
+    /**
+     * A PDF tool does one of three things: works on documents, converts
+     * something else into one, or generates one from its parameters alone.
+     * Stated as a rule rather than a list of exempt names, so it keeps holding
+     * as tools are added — and a tool that accepts nothing while claiming to
+     * need uploads is caught.
+     */
     for (const tool of ALL_TOOLS.filter((t) => t.family === 'pdf')) {
+      const generates = tool.inputMode === 'none'
       const takesPdf = tool.accepts.includes('application/pdf')
       const takesImages = tool.accepts.some((mime) => mime.startsWith('image/'))
-      expect(takesPdf || takesImages).toBe(true)
+      expect(generates || takesPdf || takesImages).toBe(true)
+      // A generator must not also claim to accept uploads.
+      if (generates) expect(tool.accepts).toEqual([])
     }
   })
 
