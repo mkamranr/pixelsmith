@@ -51,12 +51,21 @@ describe('the two tool families', () => {
     expect(ALL_TOOLS.filter((t) => t.family === 'pdf').length).toBeGreaterThan(3)
   })
 
-  it('accepts PDFs on the PDF tools and not on the image ones', () => {
+  it('gives every PDF tool a coherent input type', () => {
+    // A PDF tool either works on documents, or converts something else into
+    // one. Stated as a rule rather than a list of exempt names, so it keeps
+    // holding as tools are added.
     for (const tool of ALL_TOOLS.filter((t) => t.family === 'pdf')) {
-      if (tool.id === 'jpg-to-pdf') continue
-      expect(tool.accepts).toContain('application/pdf')
+      const takesPdf = tool.accepts.includes('application/pdf')
+      const takesImages = tool.accepts.some((mime) => mime.startsWith('image/'))
+      expect(takesPdf || takesImages).toBe(true)
     }
-    expect(ALL_TOOLS.find((t) => t.id === 'resize')!.accepts).not.toContain('application/pdf')
+  })
+
+  it('does not offer PDFs to the image tools', () => {
+    for (const tool of ALL_TOOLS.filter((t) => t.family === 'image')) {
+      expect(tool.accepts).not.toContain('application/pdf')
+    }
   })
 })
 

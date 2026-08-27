@@ -8,6 +8,11 @@ import { htmlShot } from './htmlshot.js'
 import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
 import { rotatePdf } from './pdf-rotate.js'
+import { pdfCrop } from './pdf-crop.js'
+import { imagesToPdf } from './pdf-from-images.js'
+import { pdfPageNumbers } from './pdf-page-numbers.js'
+import { pdfToImage } from './pdf-to-image.js'
+import { pdfWatermark } from './pdf-watermark.js'
 import { splitPdf } from './pdf-split.js'
 import { meme } from './meme.js'
 import { removeBackground } from './remove-background.js'
@@ -39,12 +44,22 @@ export const ALL_TOOLS = [
   splitPdf,
   organizePdf,
   rotatePdf,
+  pdfToImage,
+  imagesToPdf,
+  pdfPageNumbers,
+  pdfWatermark,
+  pdfCrop,
 ]
 
 export const registry = createRegistry(ALL_TOOLS)
 
 export {
+  imagesToPdf,
   mergePdf,
+  pdfCrop,
+  pdfPageNumbers,
+  pdfToImage,
+  pdfWatermark,
   organizePdf,
   rotatePdf,
   splitPdf,
