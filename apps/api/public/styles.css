@@ -1532,6 +1532,74 @@ input.is-driven { display: none; }
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
 
+/* ---- Marking areas on a photo ------------------------------------------ */
+/* The layer is positioned by script to sit exactly over the rendered picture,
+   which is centred in its plate and may be letterboxed. */
+.box-layer {
+  position: absolute;
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: 6px;
+}
+/* It takes focus so the keys reach it; the picture's own edge is the boundary,
+   so a heavy ring would only obscure what is being marked. */
+.box-layer:focus-visible { outline: 2px solid var(--accent, #c4551f); outline-offset: 2px; }
+
+.box-mark {
+  position: absolute;
+  border: 2px solid var(--accent, #c4551f);
+  border-radius: 3px;
+  /* Light enough to see the face underneath while placing the area over it. */
+  background: rgba(196, 85, 31, 0.16);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+  cursor: move;
+}
+
+.box-mark.is-selected {
+  background: rgba(196, 85, 31, 0.26);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 2px 10px rgba(10, 12, 18, 0.3);
+}
+
+.box-grip {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #fff;
+  border: 2px solid var(--accent, #c4551f);
+  border-radius: 2px;
+}
+/* Offset by half their own size so the grip straddles the corner. */
+.box-grip-nw { left: -7px; top: -7px; cursor: nwse-resize; }
+.box-grip-ne { right: -7px; top: -7px; cursor: nesw-resize; }
+.box-grip-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.box-grip-sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+
+.box-drop {
+  position: absolute;
+  top: -12px; right: -12px;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  padding: 0;
+  font-size: 15px; line-height: 1;
+  color: #fff;
+  background: var(--accent, #c4551f);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.box-mark:hover .box-drop,
+.box-mark.is-selected .box-drop { opacity: 1; }
+
+.box-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.box-hint { margin: 0; font-size: 13px; color: var(--muted, #6b7280); }
+.box-bar-actions { display: flex; align-items: center; gap: 10px; }
+.box-count { font-size: 13px; font-weight: 600; }
+
 /* ---- Editing a PDF on the page ----------------------------------------- */
 /* Three columns: the page rail, the page, the settings. The rail collapses to
    nothing when the document has a single page. */

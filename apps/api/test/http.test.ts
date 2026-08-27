@@ -642,6 +642,34 @@ describe('editing a PDF on the page rather than in the fields', () => {
   })
 })
 
+describe('marking areas on a photo rather than typing them', () => {
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `boxes-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  it('gives blur faces a picture to draw the areas on', async () => {
+    // The areas were only ever a JSON parameter: reachable over the API and
+    // impossible in the browser, so a face the detector missed could not be
+    // dealt with by the person looking straight at it.
+    const res = await workspace('blur-faces')
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('data-image-boxes')
+    expect(res.body).toContain('/static/boxes.js')
+  })
+
+  it('carries the marked areas in a field the server actually reads', async () => {
+    const res = await workspace('blur-faces')
+    expect(res.body).toMatch(/name="regions"/)
+  })
+
+  it('does not put a box layer on a tool with no use for one', async () => {
+    const res = await workspace('resize')
+    expect(res.body).not.toContain('data-image-boxes')
+  })
+})
+
 describe('placing a mark on the page', () => {
   const workspace = async (tool: string) => {
     const { cookie } = await signIn(h, `place-${tool}@example.test`)

@@ -110,4 +110,9 @@ describe('fields a script sets rather than a person', () => {
     const declared = registry.get('merge-pdf').ui.fields.map((field) => field.name)
     expect(declared).toContain('rotations')
   })
+
+  it('has blur faces declare the marked areas, for the same reason', () => {
+    const declared = registry.get('blur-faces').ui.fields.map((field) => field.name)
+    expect(declared).toContain('regions')
+  })
 })

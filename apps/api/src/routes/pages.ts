@@ -26,6 +26,8 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
       pdfFileView: base.family === 'pdf' && base.ui.pdfView === 'files',
       /** Whether the from/to range rows have a field to write into. */
       hasRangeField: base.ui.fields.some((field) => field.name === 'ranges'),
+      /** Areas drawn on the picture itself, for tools that ask for them. */
+      imageBoxes: base.family === 'image' && base.ui.imageEdit === 'boxes',
     })
     const q = req.query as { error?: string; from?: string }
 
@@ -37,7 +39,7 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
     let sourceJob = null
     let sourceFiles: { id: string; name: string; bytes: number; mime: string }[] = []
     if (q.from) {
-      const source = await ctx.jobs.getJobForUser(q.from, req.currentUser!.id)
+      const source = await jobFor(ctx, req, q.from)
       if (!source) throw new NotFoundError('Job')
       sourceJob = source
       if (source.status === 'done') {

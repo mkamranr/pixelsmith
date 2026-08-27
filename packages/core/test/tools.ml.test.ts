@@ -274,6 +274,95 @@ describe('blur faces with operator corrections', () => {
   })
 })
 
+describe('blur faces across a batch', () => {
+  /**
+   * Every test above uses one photo, which is why this went unnoticed: the
+   * marked areas were handed to every file in the batch identically, so a box
+   * drawn over a face in the first photo blurred those same coordinates in the
+   * second and third — where there is no face, and where the real one is left
+   * showing. Crop applies one rectangle to a whole batch deliberately; faces
+   * are not in the same place twice.
+   */
+  const callsFrom = (mark: number) => seen.slice(mark).filter((c) => c.path === '/blur-faces')
+
+  it('marks the photo the area was drawn on, and not the others', async () => {
+    const one = await fx.writePng(dir, 'batch-1.png', 200, 100)
+    const two = await fx.writePng(dir, 'batch-2.png', 200, 100)
+    const mark = seen.length
+
+    await runTool(blurFaces, {
+      inputs: [one, two],
+      outDir: join(outDir, 'batch-one'),
+      params: { detect: false, regions: JSON.stringify([{ file: 1, x: 10, y: 20, width: 30, height: 40 }]) },
+      settings: settings(),
+    })
+
+    const calls = callsFrom(mark)
+    expect(calls).toHaveLength(2)
+    expect(calls[0]!.body.extra_regions).toEqual([])
+    expect(calls[1]!.body.extra_regions).toEqual([{ x: 10, y: 20, width: 30, height: 40 }])
+  })
+
+  it('still applies an area given without a photo to all of them', async () => {
+    // The batch of identically laid out scans, where the same corner is to be
+    // covered on every page. This is what the parameter used to mean, and a
+    // caller written against it keeps working.
+    const one = await fx.writePng(dir, 'batch-3.png', 200, 100)
+    const two = await fx.writePng(dir, 'batch-4.png', 200, 100)
+    const mark = seen.length
+
+    await runTool(blurFaces, {
+      inputs: [one, two],
+      outDir: join(outDir, 'batch-all'),
+      params: { detect: false, regions: JSON.stringify([{ x: 5, y: 5, width: 10, height: 10 }]) },
+      settings: settings(),
+    })
+
+    for (const call of callsFrom(mark)) {
+      expect(call.body.extra_regions).toEqual([{ x: 5, y: 5, width: 10, height: 10 }])
+    }
+  })
+
+  it('gives a photo both its own areas and the ones meant for all', async () => {
+    const one = await fx.writePng(dir, 'batch-5.png', 200, 100)
+    const two = await fx.writePng(dir, 'batch-6.png', 200, 100)
+    const mark = seen.length
+
+    await runTool(blurFaces, {
+      inputs: [one, two],
+      outDir: join(outDir, 'batch-both'),
+      params: {
+        detect: false,
+        regions: JSON.stringify([
+          { x: 1, y: 1, width: 2, height: 2 },
+          { file: 0, x: 50, y: 50, width: 20, height: 20 },
+        ]),
+      },
+      settings: settings(),
+    })
+
+    const calls = callsFrom(mark)
+    expect(calls[0]!.body.extra_regions).toHaveLength(2)
+    expect(calls[1]!.body.extra_regions).toHaveLength(1)
+  })
+
+  it('refuses an area pointing at a photo that was not uploaded', async () => {
+    // Silently dropping it would leave a face the operator marked showing, in a
+    // picture they were told had been dealt with. That is the one outcome this
+    // tool cannot have.
+    const only = await fx.writePng(dir, 'batch-7.png', 200, 100)
+
+    await expect(
+      runTool(blurFaces, {
+        inputs: [only],
+        outDir: join(outDir, 'batch-dangling'),
+        params: { detect: false, regions: JSON.stringify([{ file: 3, x: 1, y: 1, width: 2, height: 2 }]) },
+        settings: settings(),
+      }),
+    ).rejects.toThrow(/marked area/i)
+  })
+})
+
 describe('EXIF orientation before inference', () => {
   /**
    * Phones store a portrait photo as landscape pixels plus a rotate flag. The

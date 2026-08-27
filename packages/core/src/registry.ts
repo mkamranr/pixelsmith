@@ -47,10 +47,18 @@ export interface ToolUi {
    */
   pdfEdit?: 'crop' | 'boxes' | 'place'
   /**
+   * The same idea for a picture: areas marked on the image itself rather than
+   * typed as numbers. Separate from `pdfEdit` because the thing underneath is
+   * an <img> and not a rendered document, and separate from `preview` because
+   * this produces a value the server acts on rather than showing what a setting
+   * will do.
+   */
+  imageEdit?: 'boxes'
+  /**
    * Whether the edit starts out applying to the whole document or to the page
    * on screen. Not derivable from the interaction: signing and watermarking are
    * the same gesture with opposite intent — a signature belongs on one page, a
-   * watermark on a watermark on every one. Defaults to the whole document.
+   * watermark on every one. Defaults to the whole document.
    */
   pdfScope?: 'all' | 'current'
   /**

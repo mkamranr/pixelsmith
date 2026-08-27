@@ -9,6 +9,14 @@ import type { Tool } from '../registry.js'
 
 /** An area the operator marked by hand, in source pixels. */
 export const RedactRegion = z.object({
+  /**
+   * Which uploaded photo this area belongs to, counted from zero. Absent means
+   * every photo, which is what the parameter meant before areas could be drawn
+   * per photo — useful for a batch of identically laid out scans where the same
+   * corner is covered on each, and what a caller written against the older
+   * shape still gets.
+   */
+  file: z.coerce.number().int().min(0).optional(),
   x: z.coerce.number().int().min(0),
   y: z.coerce.number().int().min(0),
   width: z.coerce.number().int().positive(),
@@ -87,6 +95,7 @@ export const blurFaces: Tool<BlurFacesParams> = {
     icon: 'user-x',
     preview: 'none',
     surface: 'canvas',
+    imageEdit: 'boxes',
     blurb: 'Find faces and obscure them before an image is shared. Detection runs on this machine.',
     fields: [
       {
@@ -101,6 +110,14 @@ export const blurFaces: Tool<BlurFacesParams> = {
         ],
       },
       { name: 'strength', label: 'Strength', kind: 'number', min: 1, max: 200, default: 24 },
+      {
+        // Written by the box editor, one entry per area with the photo it
+        // belongs to. Declared here because a value that exists only in the
+        // schema is dropped on the way in, however correct the schema is.
+        name: 'regions',
+        label: 'Marked areas',
+        kind: 'hidden',
+      },
       {
         name: 'detect',
         label: 'Find faces automatically',
@@ -129,6 +146,18 @@ export const blurFaces: Tool<BlurFacesParams> = {
 
     const regions = parseRegions(params.regions)
 
+    // A face the operator marked, silently not obscured because the area
+    // pointed at a photo that is not here, is the one outcome this tool cannot
+    // have. So it is refused rather than dropped.
+    const dangling = regions.find((r) => r.file !== undefined && r.file >= inputs.length)
+    if (dangling !== undefined) {
+      throw new BadInputError(
+        `a marked area belongs to photo ${dangling.file! + 1}, but only ${inputs.length} ${
+          inputs.length === 1 ? 'was' : 'were'
+        } uploaded`,
+      )
+    }
+
     for (const [index, input] of inputs.entries()) {
       const ext = extname(input.name).replace('.', '').toLowerCase() || 'png'
       const name = uniqueName(taken, deriveName(input.name, { ext }))
@@ -142,7 +171,12 @@ export const blurFaces: Tool<BlurFacesParams> = {
           strength: params.strength,
           confidence: params.confidence / 100,
           detect: params.detect,
-          extra_regions: regions,
+          // This photo's own areas, plus any meant for the whole batch. The
+          // photo index is the client's bookkeeping and means nothing to the
+          // detector, so it is not sent.
+          extra_regions: regions
+            .filter((r) => r.file === undefined || r.file === index)
+            .map(({ file: _file, ...rect }) => rect),
         }),
       )
 

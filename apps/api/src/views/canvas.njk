@@ -107,7 +107,22 @@
       <div class="canvas-plate" data-plate>
         <img data-canvas-image alt="Preview">
         {# Overlays for the live preview are inserted here by script. #}
+        {% if tool.imageBoxes %}
+          {# The areas are drawn against the rendered image, so this layer sits
+             exactly over it and shares its box. #}
+          <div class="box-layer" data-image-boxes data-boxes-field="regions"></div>
+        {% endif %}
       </div>
+      {% if tool.imageBoxes %}
+      <div class="box-bar" data-box-bar>
+        <p class="box-hint" data-box-hint>Drag on the picture to mark an area. Drag it to move, its
+          edges to resize, and press Delete to remove it.</p>
+        <div class="box-bar-actions">
+          <span class="box-count" data-box-count></span>
+          <button type="button" class="btn btn-quiet btn-sm" data-box-clear hidden>Clear this photo</button>
+        </div>
+      </div>
+      {% endif %}
       <div class="canvas-caption">
         <span class="canvas-name" data-canvas-name></span>
         <span class="thumb-sizes" data-canvas-sizes></span>
@@ -149,11 +164,12 @@
 </form>
 
 {% if tool.pdfFileView %}
-<script src="/static/pdffiles.js" defer></script>
+<script src="{{ asset('/static/pdffiles.js') }}" defer></script>
 {% else %}
-<script src="/static/canvas.js" defer></script>
-{% if tool.family == 'pdf' %}<script src="/static/pdfpages.js" defer></script>{% endif %}
-{% if tool.hasRangeField %}<script src="/static/pdfranges.js" defer></script>{% endif %}
+<script src="{{ asset('/static/canvas.js') }}" defer></script>
+{% if tool.imageBoxes %}<script src="{{ asset('/static/boxes.js') }}" defer></script>{% endif %}
+{% if tool.family == 'pdf' %}<script src="{{ asset('/static/pdfpages.js') }}" defer></script>{% endif %}
+{% if tool.hasRangeField %}<script src="{{ asset('/static/pdfranges.js') }}" defer></script>{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}
