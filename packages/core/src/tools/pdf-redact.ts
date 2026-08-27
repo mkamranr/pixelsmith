@@ -126,7 +126,7 @@ export const redactPdf: Tool<RedactPdfParams> = {
   params: RedactPdfParams,
   ui: {
     group: 'pdf-secure',
-    icon: 'square-slash',
+    icon: 'redact',
     surface: 'pdfedit',
     pdfEdit: 'boxes',
     preview: 'none',

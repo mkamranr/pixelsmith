@@ -58,7 +58,7 @@ export const comparePdf: Tool<ComparePdfParams> = {
   params: ComparePdfParams,
   ui: {
     group: 'pdf-edit',
-    icon: 'git-compare',
+    icon: 'compare',
     surface: 'canvas',
     preview: 'none',
     blurb:

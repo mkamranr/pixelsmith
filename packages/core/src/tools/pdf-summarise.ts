@@ -86,7 +86,7 @@ export const summarisePdf: Tool<SummarisePdfParams> = {
   params: SummarisePdfParams,
   ui: {
     group: 'pdf-read',
-    icon: 'scan-text',
+    icon: 'summary',
     surface: 'canvas',
     preview: 'none',
     blurb:
