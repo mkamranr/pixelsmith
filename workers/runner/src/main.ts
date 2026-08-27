@@ -1,4 +1,4 @@
-import { registry } from '@pixelsmith/core'
+import { refreshRunnerLlmStatus, registry } from '@pixelsmith/core'
 import { jobsRepo, openDatabase } from '@pixelsmith/db'
 import { createProcessor, jobStorage, parseQueueNames, startWorker } from '@pixelsmith/jobs'
 import { pino } from 'pino'
@@ -29,6 +29,8 @@ async function main() {
     registry,
     settings: {
       allowedRenderHosts: config.allowedRenderHosts,
+      // So a tool can read settings changed while this process is running.
+      dataDir: config.dataDir,
       ...(config.CHROMIUM_PATH ? { chromiumExecutablePath: config.CHROMIUM_PATH } : {}),
       ...(config.INFERENCE_URL ? { inferenceUrl: config.INFERENCE_URL } : {}),
       ...(config.QPDF_PATH ? { qpdfPath: config.QPDF_PATH } : {}),
@@ -37,6 +39,24 @@ async function main() {
     },
     logger,
   })
+
+  /**
+   * Report whether a language model is reachable from here.
+   *
+   * The web process cannot answer this on our behalf: it sits on a different
+   * network, and on the shipped compose these workers have no route off the
+   * host at all. Whichever process does the work is the one whose reachability
+   * decides whether the tools are offered.
+   */
+  const checkLlm = () => {
+    void refreshRunnerLlmStatus(config.dataDir).catch((err: unknown) => {
+      logger.debug({ err }, 'could not record language model reachability')
+    })
+  }
+  checkLlm()
+  const llmTimer = setInterval(checkLlm, 15_000)
+  // Nothing should be kept alive by this alone.
+  llmTimer.unref()
 
   const queueNames = parseQueueNames(config.QUEUE_NAMES)
   const worker = await startWorker({

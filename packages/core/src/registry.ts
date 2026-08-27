@@ -107,6 +107,12 @@ export interface RuntimeSettings {
   sofficePath?: string
   /** Path to tesseract, for optical character recognition. */
   tesseractPath?: string
+  /**
+   * The data directory, so a tool can read settings an operator changes while
+   * the server is running — the language model endpoint, in particular. Read
+   * per job rather than at start-up, so configuring one needs no restart.
+   */
+  dataDir?: string
 }
 
 export const DEFAULT_SETTINGS: RuntimeSettings = { allowedRenderHosts: [] }
@@ -139,6 +145,12 @@ export interface Tool<P = any> {
   queue: QueueName
   /** Accepted input mime types, or `['*']` for any image. */
   accepts: string[]
+  /**
+   * A capability the server must have configured before this tool is offered.
+   * `llm` means a language model endpoint that has answered — a menu full of
+   * entries that only fail is worse than a menu without them.
+   */
+  requires?: 'llm'
   /**
    * `files` (the default) takes uploads. `none` marks a tool that generates an
    * image from its parameters alone, so the UI shows no upload control and the

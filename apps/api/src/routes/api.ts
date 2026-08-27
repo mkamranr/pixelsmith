@@ -34,6 +34,12 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
       accepts: t.accepts,
       /** 'none' means the tool builds its output from settings alone. */
       inputMode: t.inputMode ?? 'files',
+      /**
+       * Listed even when it cannot be used, with what it needs — a client that
+       * cannot see a tool at all has no way to learn why.
+       */
+      requires: t.requires ?? null,
+      available: !t.requires || ctx.capabilities[t.requires],
       params: zodToFields(t),
     })),
   }))
@@ -50,6 +56,8 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
       blurb: t.ui.blurb ?? null,
       accepts: t.accepts,
       inputMode: t.inputMode ?? 'files',
+      requires: t.requires ?? null,
+      available: !t.requires || ctx.capabilities[t.requires],
       params: zodToFields(t),
     }
   })

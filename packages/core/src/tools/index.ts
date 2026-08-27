@@ -19,6 +19,7 @@ import { imagesToPdf } from './pdf-from-images.js'
 import { pdfPageNumbers } from './pdf-page-numbers.js'
 import { ocrPdf } from './pdf-ocr.js'
 import { comparePdf } from './pdf-compare.js'
+import { summarisePdf } from './pdf-summarise.js'
 import { redactPdf } from './pdf-redact.js'
 import { signPdf } from './pdf-sign.js'
 import { pdfToExcel } from './pdf-to-excel.js'
@@ -74,6 +75,7 @@ export const ALL_TOOLS = [
   redactPdf,
   signPdf,
   comparePdf,
+  summarisePdf,
 ]
 
 export const registry = createRegistry(ALL_TOOLS)

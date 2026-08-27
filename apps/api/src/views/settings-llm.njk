@@ -1,0 +1,116 @@
+{% extends "layout.njk" %}
+{% block title %}Language model — Pixelsmith{% endblock %}
+{% block content %}
+
+<nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> Settings</nav>
+<h1 class="page-title">Language model</h1>
+<p class="lede">
+  Some tools need a language model to read a document and write about it. Point
+  this at one you run yourself — vLLM, Ollama, llama.cpp, or anything else that
+  speaks the OpenAI API — and those tools appear. Nothing is sent anywhere else.
+</p>
+
+{% if note %}<div class="alert alert-ok" role="status">{{ note }}</div>{% endif %}
+{% if problem %}<div class="alert alert-error" role="alert">{{ problem }}</div>{% endif %}
+
+<div class="settings-state">
+  {% if usable %}
+    <p class="settings-status is-ready">
+      <strong>{{ llm.model }}</strong> at <code>{{ llm.baseUrl }}</code> is reachable from the
+      workers, so the tools that need it are available.
+    </p>
+  {% elif llm.baseUrl %}
+    <p class="settings-status is-waiting">
+      <strong>{{ llm.model }}</strong> at <code>{{ llm.baseUrl }}</code> is configured, but the
+      tools that need it are not offered yet.
+    </p>
+  {% else %}
+    <p class="settings-status">No model is configured, so those tools are not offered.</p>
+  {% endif %}
+
+  {% if llm.baseUrl %}
+    {#
+      Two checks, because two processes: this one serves the pages, and the
+      workers do the work. They are on different networks — the workers have no
+      route off the host on the shipped compose — so only the workers' answer
+      decides whether a tool is offered.
+    #}
+    <ul class="settings-checks">
+      <li>
+        This server: {% if llm.verifiedAt %}reached it{% else %}has not reached it{% endif %}.
+      </li>
+      <li>
+        The workers:
+        {% if runner and runner.ok %}reached it{% elif runner %}could not — {{ runner.detail }}
+        {% else %}have not reported yet{% endif %}.
+      </li>
+    </ul>
+    {% if llm.verifiedAt and runner and not runner.ok %}
+      <p class="settings-detail">
+        The workers run on an isolated network by default and cannot reach anything off this host.
+        Give them a route to the model — see the runbook — or run the model where they can see it.
+      </p>
+    {% endif %}
+  {% endif %}
+  {% if llm.lastDetail and not llm.ready %}
+    <p class="settings-detail">Last check: {{ llm.lastDetail }}</p>
+  {% endif %}
+  {% if llm.hasKey %}<p class="hint">A key is set. It is never shown here again.</p>{% endif %}
+</div>
+
+<form class="settings-form" method="post" action="/settings/llm">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+  <div class="field">
+    <label for="baseUrl">Base URL</label>
+    <input type="text" id="baseUrl" name="baseUrl" value="{{ llm.baseUrl }}"
+           placeholder="http://localhost:11434/v1" required>
+    <p class="hint">
+      Include the version path. Ollama is usually
+      <code>http://localhost:11434/v1</code>; vLLM
+      <code>http://localhost:8000/v1</code>.
+    </p>
+  </div>
+
+  <div class="field">
+    <label for="model">Model</label>
+    <input type="text" id="model" name="model" value="{{ llm.model }}"
+           placeholder="qwen2.5:14b" required>
+    <p class="hint">Exactly as the endpoint names it. Saving checks that it is on the list.</p>
+  </div>
+
+  <div class="field">
+    <label for="apiKey">Key</label>
+    <input type="password" id="apiKey" name="apiKey" autocomplete="off"
+           placeholder="{% if llm.hasKey %}Leave blank to keep the one stored{% else %}Usually not needed locally{% endif %}">
+    <p class="hint">
+      Stored on this server only, in a file only its own user can read. A model
+      you run yourself normally needs none.
+    </p>
+  </div>
+
+  <div class="field">
+    <label for="timeoutMs">Give up after (ms)</label>
+    <input type="number" id="timeoutMs" name="timeoutMs" value="{{ llm.timeoutMs }}"
+           min="1000" max="600000" step="1000">
+    <p class="hint">A small model on modest hardware can take a while over a long document.</p>
+  </div>
+
+  <div class="settings-actions">
+    <button class="btn btn-primary" type="submit">Save and check</button>
+  </div>
+</form>
+
+{% if llm.baseUrl %}
+  <div class="settings-secondary">
+    <form method="post" action="/settings/llm/test" class="inline-form">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <button class="btn btn-sm" type="submit">Check again</button>
+    </form>
+    <form method="post" action="/settings/llm/forget" class="inline-form">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <button class="btn btn-sm btn-quiet" type="submit">Forget this endpoint</button>
+    </form>
+  </div>
+{% endif %}
+{% endblock %}

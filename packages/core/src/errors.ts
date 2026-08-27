@@ -112,6 +112,19 @@ export class ExternalToolUnavailableError extends PixelsmithError {
   }
 }
 
+export class LlmUnavailableError extends PixelsmithError {
+  constructor(detail: string) {
+    // 503, not 500: the request was fine, there is nothing to send it to.
+    super('llm_unavailable', 503, `No language model is available: ${detail}`)
+  }
+}
+
+export class LlmFailedError extends PixelsmithError {
+  constructor(detail: string) {
+    super('llm_failed', 502, `The language model could not answer: ${detail}`)
+  }
+}
+
 export class ExternalToolFailedError extends PixelsmithError {
   constructor(
     readonly tool: string,

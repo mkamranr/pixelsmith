@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { deriveName, probeForTool, probeImage } from '@pixelsmith/core'
+import { deriveName, LlmUnavailableError, probeForTool, probeImage } from '@pixelsmith/core'
 import { BadRequestError, NotFoundError, TooManyFilesError } from './errors.js'
 import { coerceFormParams } from './params.js'
 import type { AppContext } from './context.js'
@@ -127,6 +127,14 @@ export async function intakeJob(options: IntakeOptions): Promise<{ jobId: string
     const toolId = options.toolId ?? String(fields.tool ?? '').trim()
     if (!toolId || !ctx.registry.has(toolId)) throw new NotFoundError('Tool')
     const tool = ctx.registry.get(toolId)
+
+    // Refused here rather than in a worker, so the caller hears why instead of
+    // watching a job fail.
+    if (tool.requires === 'llm' && !ctx.capabilities.llm) {
+      throw new LlmUnavailableError(
+        'configure one under Settings before using the tools that need it',
+      )
+    }
 
     // Nothing uploaded? The caller may be carrying a previous job's results
     // forward. Copy them in rather than making them download and re-upload.

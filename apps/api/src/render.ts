@@ -30,6 +30,7 @@ export const TOOL_FAMILIES = [
       { id: 'pdf-convert', label: 'Convert', blurb: 'To and from other formats.' },
       { id: 'pdf-edit', label: 'Edit', blurb: 'Annotate, stamp and number pages.' },
       { id: 'pdf-secure', label: 'Protect', blurb: 'Passwords, watermarks and redaction.' },
+      { id: 'pdf-read', label: 'Read', blurb: 'Have a long document read and summarised.' },
     ],
   },
 ] as const
@@ -41,13 +42,20 @@ export const TOOL_FAMILIES = [
 export function pageData(ctx: AppContext, req: FastifyRequest, reply: FastifyReply, extras: PageExtras = {}) {
   const tools = ctx.registry.list()
 
+  /**
+   * A tool that needs something this server has not got is left out rather than
+   * shown and broken. One declaration on the tool keeps it out of every menu,
+   * the home page and the API listing at once.
+   */
+  const offered = tools.filter((t) => !t.requires || ctx.capabilities[t.requires])
+
   const families = TOOL_FAMILIES.map((family) => ({
     id: family.id,
     label: family.label,
     groups: family.groups
       .map((group) => ({
         ...group,
-        tools: tools.filter((t) => t.family === family.id && t.ui.group === group.id),
+        tools: offered.filter((t) => t.family === family.id && t.ui.group === group.id),
       }))
       .filter((group) => group.tools.length > 0),
   })).filter((family) => family.groups.length > 0)

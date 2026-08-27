@@ -189,6 +189,50 @@ An empty allowlist refuses all URL rendering; pasted HTML always works.
 
 ---
 
+## Giving it a language model
+
+Some tools — summarising a document, for one — need a language model. Pixelsmith
+talks to anything that speaks the OpenAI API, so a model you run yourself works:
+vLLM, Ollama, llama.cpp. Configure it under **Settings → Language model**: a base
+URL, a model name, and a key only if your endpoint wants one. The key is written
+to `llm.json` in the data directory, readable only by the user the server runs
+as, and never shown on the page again.
+
+Those tools are not offered until a model has answered — a menu entry that always
+fails is worse than one that is not there.
+
+**The catch, and it is the whole of the difficulty.** The page is served by `api`
+and the work is done by `runner`, and they are not on the same network. `runner`
+has no route off this host at all, by design (see below). So a model on the host
+machine, or anywhere else on your network, is reachable from `api` and *not* from
+`runner` — and it is `runner` that has to reach it. The settings page reports the
+two separately for exactly this reason, and only the workers' answer decides
+whether the tools appear.
+
+Three ways to give the workers a route, in the order worth trying:
+
+1. **Run the model in the same Compose project**, on the `internal` network. It
+   then needs no route off the host at all, and the air gap stays exactly as it
+   is. This is the right answer for a machine that has a GPU.
+2. **Put the workers on a network that reaches the model**, with an override
+   file. This widens what the workers can reach, so decide deliberately:
+
+   ```yaml
+   # docker-compose.override.yml
+   services:
+     runner:
+       networks: [internal, edge]
+   ```
+
+3. **Point at a model on another host** — then the workers need a route to it,
+   which is case 2 plus firewall rules you write yourself.
+
+Whichever you choose, the workers re-check every fifteen seconds and the pages
+follow within ten, so a model that goes away takes its tools out of the menus on
+its own, and brings them back when it returns. Nothing needs restarting.
+
+---
+
 ## Confirming the air gap
 
 Two different guarantees, and it is worth being precise about which is which.
