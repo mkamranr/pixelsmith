@@ -37,6 +37,5 @@ apps/api/public/brand/
 .venv-inference/
 .venv/
 
-# Local editor and assistant configuration, not part of the project.
-.claude/
-CLAUDE.md
+# Editor and assistant configuration is ignored locally, in .git/info/exclude,
+# so this file stays about the project rather than about anyone's tooling.

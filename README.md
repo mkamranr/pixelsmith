@@ -13,6 +13,52 @@ third-party service, no API key and no telemetry.
 Built to be handed to an air-gapped server as a single directory and installed
 with one script.
 
+## What it looks like
+
+<p align="center">
+  <img src="docs/screenshots/home.jpg" alt="The tool catalogue, grouped by what each tool is for" width="820">
+</p>
+
+Every tool gets a workspace rather than a form: the picture is on screen while
+the settings are chosen, so the effect of a setting is visible before anything is
+submitted.
+
+<p align="center">
+  <img src="docs/screenshots/compress-images.jpg" alt="Compressing an image, with the picture alongside the settings" width="820">
+</p>
+
+PDF tools lay the pages out as thumbnails. Pages are dragged into order, turned,
+duplicated or dropped — across several documents at once — and what comes out is
+one document arranged exactly as it was left.
+
+<p align="center">
+  <img src="docs/screenshots/organise-pdf.jpg" alt="Organise PDF: every page of every document, draggable" width="820">
+</p>
+
+Anything geometric is done on the document itself. Cropping is a rectangle
+dragged on the page, not four numbers typed from memory — though the numbers are
+still there, and still authoritative, for anyone who wants them.
+
+<p align="center">
+  <img src="docs/screenshots/crop-pdf.jpg" alt="Cropping a PDF by dragging on the page, with a rail of pages alongside" width="820">
+</p>
+
+Everything the pages can do, a script can do. The API is documented in the app
+as well as in [docs/API.md](docs/API.md).
+
+<p align="center">
+  <img src="docs/screenshots/rest-api.jpg" alt="The built-in REST API reference" width="820">
+</p>
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/API.md](docs/API.md) | Every endpoint, every tool's parameters, worked examples |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Installing, configuring, and the air-gapped bundle |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | Running it: retention, backups, capacity, diagnosing failures |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How it is put together, and why |
+
 ## Why it exists
 
 The public image tools are convenient and entirely unusable when the images
@@ -67,6 +113,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **Protect** | AES-256 encryption, with printing and copying controlled |
 | **Unlock** | Removes a password you know |
 | **Repair** | Rebuilds a damaged document as far as it can be read |
+| **Summarise** | Reads a document and writes a summary — needs a language model |
 
 Every tool takes batches, streams results as a zip, and can pass its output
 straight into another tool without re-uploading. PDF tools show the pages as
@@ -105,6 +152,14 @@ librsvg and placed as an image; everything else stays selectable text.
 words sit, not how they were laid out, so a conversion cannot recover a structure
 that was never stored. The blurbs say what you will actually get rather than
 implying a perfect round trip.
+
+**A tool that cannot work is not offered.** Summarising needs a language model,
+which you point at your own vLLM, Ollama or llama.cpp under Settings. Until one
+has actually answered — checked by the workers, which are the tier that has to
+reach it, not by the web tier that happens to be able to — the tools that need it
+are absent from the menus, from the home page and from the API's availability
+flag, and are refused at the door with a reason. A menu entry that always fails
+is worse than no menu entry.
 
 **It is a multi-page application.** Server-rendered pages, forms that post
 normally, and a job page that falls back to a meta refresh. Live progress and the
