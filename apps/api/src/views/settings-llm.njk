@@ -76,7 +76,12 @@
     <label for="model">Model</label>
     <input type="text" id="model" name="model" value="{{ llm.model }}"
            placeholder="qwen2.5:14b" required>
-    <p class="hint">Exactly as the endpoint names it. Saving checks that it is on the list.</p>
+    <p class="hint">
+      Exactly as the endpoint names it. Saving checks that it is on the list.
+      A reasoning model is asked to run without thinking, which vLLM and SGLang
+      honour; where a server does not, the thinking is dropped before anything
+      is written, so it never reaches the document either way.
+    </p>
   </div>
 
   <div class="field">

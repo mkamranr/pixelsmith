@@ -286,6 +286,21 @@ export interface ChatOptions {
  * llama.cpp or anything else that speaks the same shape.
  */
 /**
+ * Asks the server to run the model in its non-thinking mode. Understood by vLLM
+ * and SGLang, which is what a self-hosted Qwen or DeepSeek is usually served
+ * by; other servers ignore fields they do not know.
+ *
+ * Worth asking rather than only cleaning up afterwards: the same one-sentence
+ * summary from the same Qwen cost 199 completion tokens with thinking and 10
+ * without. On a long document split into parts, that is the difference between
+ * a summary that arrives and one somebody gives up waiting for.
+ *
+ * `stripReasoning` stays the guarantee, because a server may ignore this and a
+ * model may think regardless.
+ */
+const THINKING_OFF = { chat_template_kwargs: { enable_thinking: false } }
+
+/**
  * A reasoning model narrates its working in <think> blocks and puts the answer
  * after them, both in the same `content` field. The narration is the model
  * talking to itself — never the answer, and not something to show a reader, who
@@ -313,24 +328,34 @@ export async function chatWithLlm(
   }
 
   const fetchImpl = options.fetchImpl ?? fetch
-  let response: Response
 
-  try {
-    response = await fetchImpl(endpoint(settings.baseUrl, 'chat/completions'), {
-      method: 'POST',
-      headers: headersFor(settings),
-      body: JSON.stringify({
-        model: settings.model,
-        messages,
-        ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
-        ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
-      }),
-      signal: AbortSignal.timeout(settings.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-    })
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err)
-    throw new LlmUnavailableError(`${settings.baseUrl} could not be reached: ${detail}`)
+  const send = async (body: object): Promise<Response> => {
+    try {
+      return await fetchImpl(endpoint(settings.baseUrl, 'chat/completions'), {
+        method: 'POST',
+        headers: headersFor(settings),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(settings.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      })
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      throw new LlmUnavailableError(`${settings.baseUrl} could not be reached: ${detail}`)
+    }
   }
+
+  const request = {
+    model: settings.model,
+    messages,
+    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+    ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+  }
+
+  let response = await send({ ...request, ...THINKING_OFF })
+
+  // Only a refusal of the request itself is worth a second attempt. Anything
+  // else — the model out of memory, the endpoint gone — is a real fault, and
+  // asking again would just fail twice and report the second failure.
+  if (response.status === 400) response = await send(request)
 
   const body = (await response.json().catch(() => null)) as {
     choices?: { message?: { content?: string } }[]

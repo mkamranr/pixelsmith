@@ -44,6 +44,24 @@ function stubFetch(answer: { status?: number; body?: unknown; throws?: string })
   return { impl: impl as unknown as typeof fetch, calls }
 }
 
+/** Like stubFetch, but answers a different way each call. */
+function stubReplies(answers: { status?: number; body?: unknown }[]) {
+  const calls: { url: string; init: RequestInit }[] = []
+  const impl = async (url: string, init: RequestInit = {}) => {
+    calls.push({ url, init })
+    const answer = answers[Math.min(calls.length - 1, answers.length - 1)]!
+    return {
+      ok: (answer.status ?? 200) < 400,
+      status: answer.status ?? 200,
+      async json() { return answer.body ?? {} },
+      async text() { return JSON.stringify(answer.body ?? {}) },
+    } as unknown as Response
+  }
+  return { impl: impl as unknown as typeof fetch, calls }
+}
+
+const bodyOf = (call: { init: RequestInit }) => JSON.parse(String(call.init.body))
+
 describe('remembering how to reach a model', () => {
   it('keeps the settings where both the web process and the workers can read them', async () => {
     // A file on the shared data volume rather than the environment, so
@@ -229,6 +247,78 @@ describe('a model that thinks out loud', () => {
         choices: [{ message: { reasoning_content: 'thinking about it', content: 'The answer.' } }],
       },
     })
+
+    const said = await chatWithLlm(settings, [{ role: 'user', content: 'x' }], {
+      fetchImpl: fetcher.impl,
+    })
+
+    expect(said).toBe('The answer.')
+  })
+})
+
+describe('asking a model not to think out loud', () => {
+  /**
+   * Stripping the thinking afterwards still pays for it. The same one-sentence
+   * summary from the same Qwen cost 199 completion tokens with thinking and 10
+   * without, so this is the difference between a summary that takes a moment
+   * and one that takes twenty — on a document split into many parts, multiplied
+   * by every part.
+   */
+  const ok = { choices: [{ message: { content: 'The answer.' } }] }
+
+  it('says so in the request', async () => {
+    const fetcher = stubReplies([{ body: ok }])
+
+    await chatWithLlm(settings, [{ role: 'user', content: 'x' }], { fetchImpl: fetcher.impl })
+
+    expect(bodyOf(fetcher.calls[0]!).chat_template_kwargs).toEqual({ enable_thinking: false })
+  })
+
+  it('asks again without it when the endpoint will not accept the field', async () => {
+    // vLLM and SGLang understand it and other servers ignore what they do not
+    // know, but an endpoint that validates strictly would otherwise refuse
+    // every request — a working model that never answers.
+    const fetcher = stubReplies([
+      { status: 400, body: { error: { message: 'unrecognised field chat_template_kwargs' } } },
+      { body: ok },
+    ])
+
+    const said = await chatWithLlm(settings, [{ role: 'user', content: 'x' }], {
+      fetchImpl: fetcher.impl,
+    })
+
+    expect(said).toBe('The answer.')
+    expect(fetcher.calls).toHaveLength(2)
+    expect(bodyOf(fetcher.calls[1]!).chat_template_kwargs).toBeUndefined()
+    expect(bodyOf(fetcher.calls[1]!).messages).toEqual([{ role: 'user', content: 'x' }])
+  })
+
+  it('reports the refusal when asking again does not help either', async () => {
+    // The second attempt's answer is the honest one: the field was never the
+    // problem, and a real fault must not be reported as a retry that failed.
+    const fetcher = stubReplies([{ status: 400, body: { error: { message: 'context too long' } } }])
+
+    await expect(
+      chatWithLlm(settings, [{ role: 'user', content: 'x' }], { fetchImpl: fetcher.impl }),
+    ).rejects.toThrow(/context too long/)
+  })
+
+  it('does not ask twice when the endpoint failed for its own reasons', async () => {
+    // A model out of memory is not a model objecting to a field.
+    const fetcher = stubReplies([{ status: 500, body: { error: { message: 'out of memory' } } }])
+
+    await expect(
+      chatWithLlm(settings, [{ role: 'user', content: 'x' }], { fetchImpl: fetcher.impl }),
+    ).rejects.toThrow(/out of memory/)
+    expect(fetcher.calls).toHaveLength(1)
+  })
+
+  it('still strips thinking from a model that thinks anyway', async () => {
+    // Not every server understands the field, and a model can be built to think
+    // regardless. Asking is the saving; stripping is the guarantee.
+    const fetcher = stubReplies([
+      { body: { choices: [{ message: { content: '<think>hmm</think>The answer.' } }] } },
+    ])
 
     const said = await chatWithLlm(settings, [{ role: 'user', content: 'x' }], {
       fetchImpl: fetcher.impl,
