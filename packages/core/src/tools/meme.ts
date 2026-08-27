@@ -66,6 +66,7 @@ function captionSvg(
 export const meme: Tool<MemeParams> = {
   id: 'meme',
   title: 'Meme generator',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: MemeParams,

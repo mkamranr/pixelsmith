@@ -34,6 +34,7 @@ export type ResizeParams = z.infer<typeof ResizeParams>
 export const resize: Tool<ResizeParams> = {
   id: 'resize',
   title: 'Resize images',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: ResizeParams,

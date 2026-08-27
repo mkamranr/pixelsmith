@@ -96,9 +96,14 @@ export interface OpContext<P = unknown> {
   onProgress?: (fraction: number) => void
 }
 
+/** Which menu a tool lives under. Images and PDFs are separate workflows. */
+export type ToolFamily = 'image' | 'pdf'
+
 export interface Tool<P = any> {
   id: string
   title: string
+  /** Images or PDFs. Required, so a new tool cannot land in neither menu. */
+  family: ToolFamily
   queue: QueueName
   /** Accepted input mime types, or `['*']` for any image. */
   accepts: string[]

@@ -335,6 +335,7 @@ async function applyOp(buffer: Buffer, op: EditOp): Promise<Buffer> {
 export const editor: Tool<EditorParams> = {
   id: 'editor',
   title: 'Photo editor',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: EditorParams,

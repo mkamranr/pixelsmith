@@ -21,6 +21,7 @@ export type RotateParams = z.infer<typeof RotateParams>
 export const rotate: Tool<RotateParams> = {
   id: 'rotate',
   title: 'Rotate & flip',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: RotateParams,

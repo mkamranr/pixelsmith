@@ -35,6 +35,7 @@ export type UpscaleParams = z.infer<typeof UpscaleParams>
 export const upscale: Tool<UpscaleParams> = {
   id: 'upscale',
   title: 'Upscale image',
+  family: 'image',
   queue: 'ml',
   accepts: [...RASTER_MIMES],
   params: UpscaleParams,

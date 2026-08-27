@@ -76,6 +76,7 @@ async function searchForTarget(
 export const compress: Tool<CompressParams> = {
   id: 'compress',
   title: 'Compress images',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: CompressParams,

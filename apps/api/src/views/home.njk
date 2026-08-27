@@ -1,15 +1,15 @@
 {% extends "layout.njk" %}
 {% import "_icons.njk" as ic %}
-{% block title %}Pixelsmith — self-hosted image workshop{% endblock %}
+{% block title %}Pixelsmith — self-hosted image and PDF workshop{% endblock %}
 {% block content %}
 
 <section class="hero">
   <p class="eyebrow">Runs entirely on your own server</p>
-  <h1>Every image tool you need,<br><span class="accent">without the internet.</span></h1>
+  <h1>Every image and PDF tool,<br><span class="accent">without the internet.</span></h1>
   <p class="lede">
-    Compress, resize, convert, watermark and redact images in batches. No third-party services,
-    no API keys, no telemetry. Files are processed on this machine and deleted
-    {{ retentionHours }} hour{% if retentionHours != 1 %}s{% endif %} later.
+    Compress, resize, convert, watermark and redact images. Merge, split, reorder and rotate PDFs.
+    No third-party services, no API keys, no telemetry. Files are processed on this machine and
+    deleted {{ retentionHours }} hour{% if retentionHours != 1 %}s{% endif %} later.
   </p>
   {% if not canUse %}
     <p class="hero-actions"><a class="btn btn-primary btn-lg" href="/login">Sign in to get started</a></p>
@@ -22,23 +22,28 @@
   {% endif %}
 </section>
 
-{% for group in groups %}
-<section class="group">
-  <div class="group-head">
-    <h2>{{ group.label }}</h2>
-    <p class="muted">{{ group.blurb }}</p>
-  </div>
-  <ul class="tool-grid">
-    {% for tool in group.tools %}
-      <li>
-        <a class="tool-card" href="/tools/{{ tool.id }}">
-          <span class="tool-icon">{{ ic.icon(tool.ui.icon, 20) }}</span>
-          <span class="tool-title">{{ tool.title }}</span>
-          {% if tool.ui.blurb %}<span class="tool-blurb">{{ tool.ui.blurb }}</span>{% endif %}
-        </a>
-      </li>
-    {% endfor %}
-  </ul>
+{% for family in families %}
+<section class="family">
+  <h2 class="family-title">{{ family.label }}</h2>
+  {% for group in family.groups %}
+  <section class="group">
+    <div class="group-head">
+      <h3>{{ group.label }}</h3>
+      <p class="muted">{{ group.blurb }}</p>
+    </div>
+    <ul class="tool-grid">
+      {% for tool in group.tools %}
+        <li>
+          <a class="tool-card" href="/tools/{{ tool.id }}">
+            <span class="tool-icon">{{ ic.icon(tool.ui.icon, 20) }}</span>
+            <span class="tool-title">{{ tool.title }}</span>
+            {% if tool.ui.blurb %}<span class="tool-blurb">{{ tool.ui.blurb }}</span>{% endif %}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
 </section>
 {% endfor %}
 
@@ -54,6 +59,10 @@
   <div class="assurance">
     <h3>Metadata stripped</h3>
     <p>EXIF, GPS coordinates and camera details are removed from every processed image.</p>
+  </div>
+  <div class="assurance">
+    <h3>Documents too</h3>
+    <p>PDFs are merged, split, reordered and rotated by the same pipeline, on the same machine.</p>
   </div>
 </section>
 {% endblock %}

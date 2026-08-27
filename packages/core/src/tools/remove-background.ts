@@ -18,6 +18,7 @@ export type RemoveBackgroundParams = z.infer<typeof RemoveBackgroundParams>
 export const removeBackground: Tool<RemoveBackgroundParams> = {
   id: 'remove-background',
   title: 'Remove background',
+  family: 'image',
   queue: 'ml',
   accepts: [...RASTER_MIMES],
   params: RemoveBackgroundParams,

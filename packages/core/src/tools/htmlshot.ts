@@ -111,6 +111,7 @@ const HIDE_OVERLAYS_SCRIPT = `(() => {
 export const htmlShot: Tool<HtmlShotParams> = {
   id: 'html-to-image',
   title: 'HTML to image',
+  family: 'image',
   queue: 'render',
   accepts: [],
   inputMode: 'none',

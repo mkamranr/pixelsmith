@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { DEFAULT_LIMITS, probeImage, type ProbeLimits } from './probe.js'
+import { DEFAULT_LIMITS, probeImage, sniffMime, type ProbeLimits } from './probe.js'
+import { DEFAULT_PDF_LIMITS, PDF_MIME, probePdf, type PdfLimits } from './pdf.js'
 import { InvalidParamsError, UnsupportedInputError } from './errors.js'
 import { DEFAULT_SETTINGS, type InputFile, type OutputFile, type RuntimeSettings, type Tool } from './registry.js'
 
@@ -22,6 +23,7 @@ export interface RunToolArgs {
   onProgress?: (fraction: number) => void
   signal?: AbortSignal
   limits?: ProbeLimits
+  pdfLimits?: PdfLimits
   settings?: RuntimeSettings
   /** Supporting files keyed by field name (absolute paths). */
   assets?: Record<string, string>
@@ -37,6 +39,7 @@ export interface RunToolArgs {
  */
 export async function runTool(tool: Tool, args: RunToolArgs): Promise<OutputFile[]> {
   const limits = args.limits ?? DEFAULT_LIMITS
+  const pdfLimits = args.pdfLimits ?? DEFAULT_PDF_LIMITS
   // safeParse, so bad params surface as a typed InvalidParamsError with field
   // detail rather than a raw ZodError the caller has to interpret.
   const parsed = tool.params.safeParse(args.params ?? {})
@@ -52,7 +55,14 @@ export async function runTool(tool: Tool, args: RunToolArgs): Promise<OutputFile
   for (const entry of args.inputs) {
     const path = typeof entry === 'string' ? entry : entry.path
     const displayName = (typeof entry === 'string' ? undefined : entry.name) ?? basename(path)
-    const probe = await probeImage(path, limits)
+
+    /**
+     * Validate against the rules for what the file actually is. A PDF is a
+     * container with an object graph, not a raster: it needs page-count and
+     * encryption checks where an image needs pixel and decompression-bomb ones.
+     */
+    const sniffed = await sniffMime(path)
+    const probe = sniffed === PDF_MIME ? await probePdf(path, pdfLimits) : await probeImage(path, limits)
 
     if (!tool.accepts.includes('*') && !tool.accepts.includes(probe.mime)) {
       throw new UnsupportedInputError(tool.id, probe.mime)

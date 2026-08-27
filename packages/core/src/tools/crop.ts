@@ -19,6 +19,7 @@ export type CropParams = z.infer<typeof CropParams>
 export const crop: Tool<CropParams> = {
   id: 'crop',
   title: 'Crop images',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: CropParams,

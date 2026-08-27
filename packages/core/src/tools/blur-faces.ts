@@ -78,6 +78,7 @@ interface RedactResult {
 export const blurFaces: Tool<BlurFacesParams> = {
   id: 'blur-faces',
   title: 'Blur faces',
+  family: 'image',
   queue: 'ml',
   accepts: [...RASTER_MIMES],
   params: BlurFacesParams,

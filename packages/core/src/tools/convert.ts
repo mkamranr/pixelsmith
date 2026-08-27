@@ -23,6 +23,7 @@ export type ConvertParams = z.infer<typeof ConvertParams>
 export const convert: Tool<ConvertParams> = {
   id: 'convert',
   title: 'Convert format',
+  family: 'image',
   queue: 'image',
   // SVG is accepted here and nowhere else: this is the tool whose job is to
   // turn something that is not pixels into pixels.

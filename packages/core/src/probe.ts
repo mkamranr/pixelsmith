@@ -66,7 +66,11 @@ const TAIL_MARKERS: Record<string, (tail: Buffer) => boolean> = {
   'image/gif': (t) => t.includes(Buffer.from([0x3b])),
 }
 
-async function sniffMime(path: string): Promise<string> {
+/**
+ * Identify a file by its bytes. Exported because the run gate has to know which
+ * validator applies — an image and a PDF need entirely different checks.
+ */
+export async function sniffMime(path: string): Promise<string> {
   const detected = await fileTypeFromFile(path)
   if (detected) return detected.mime === 'application/xml' ? 'image/svg+xml' : detected.mime
 

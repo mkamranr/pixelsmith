@@ -153,6 +153,7 @@ async function buildImageOverlay(
 export const watermark: Tool<WatermarkParams> = {
   id: 'watermark',
   title: 'Watermark images',
+  family: 'image',
   queue: 'image',
   accepts: [...RASTER_MIMES],
   params: WatermarkParams,

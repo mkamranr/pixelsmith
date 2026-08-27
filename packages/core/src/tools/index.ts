@@ -5,6 +5,10 @@ import { convert } from './convert.js'
 import { crop } from './crop.js'
 import { editor } from './editor.js'
 import { htmlShot } from './htmlshot.js'
+import { mergePdf } from './pdf-merge.js'
+import { organizePdf } from './pdf-organize.js'
+import { rotatePdf } from './pdf-rotate.js'
+import { splitPdf } from './pdf-split.js'
 import { meme } from './meme.js'
 import { removeBackground } from './remove-background.js'
 import { resize } from './resize.js'
@@ -30,11 +34,20 @@ export const ALL_TOOLS = [
   blurFaces,
   meme,
   htmlShot,
+  // ---- PDF ----
+  mergePdf,
+  splitPdf,
+  organizePdf,
+  rotatePdf,
 ]
 
 export const registry = createRegistry(ALL_TOOLS)
 
 export {
+  mergePdf,
+  organizePdf,
+  rotatePdf,
+  splitPdf,
   blurFaces,
   editor,
   compress,

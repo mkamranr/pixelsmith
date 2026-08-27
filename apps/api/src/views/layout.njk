@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Pixelsmith{% endblock %}</title>
-<meta name="description" content="Pixelsmith — a self-hosted image workshop. Your images never leave the building.">
+<meta name="description" content="Pixelsmith — a self-hosted image and PDF workshop. Your files never leave the building.">
 <link rel="stylesheet" href="/static/styles.css">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 </head>
@@ -27,17 +27,18 @@
       {# A disclosure rather than a scripted dropdown: it opens, closes and is
          keyboard operable with no JavaScript at all. Script only adds
          outside-click and Escape. #}
+      {% for family in families %}
       <details class="menu" data-menu>
         <summary class="menu-trigger">
-          Tools
+          {{ family.label }}
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 9l6 6 6-6"/></svg>
         </summary>
 
-        <div class="menu-panel" role="group" aria-label="All tools">
+        <div class="menu-panel" role="group" aria-label="{{ family.label }} tools">
           <div class="menu-inner">
-          {% for group in groups %}
+          {% for group in family.groups %}
             <section class="menu-group">
               <h2 class="menu-group-title">{{ group.label }}</h2>
               <ul class="menu-list">
@@ -55,6 +56,7 @@
           </div>
         </div>
       </details>
+      {% endfor %}
 
       {% if openAccess %}
         <a href="/jobs">My jobs</a>
@@ -82,7 +84,7 @@
 
 <footer class="footer">
   <div class="wrap footer-inner">
-    <p><strong>Pixelsmith</strong> — self-hosted image workshop. Nothing is uploaded anywhere but this server.</p>
+    <p><strong>Pixelsmith</strong> — self-hosted image and PDF workshop. Nothing is uploaded anywhere but this server.</p>
     <p class="muted">Results are deleted automatically after {{ retentionHours }} hour{% if retentionHours != 1 %}s{% endif %}.</p>
   </div>
 </footer>

@@ -76,3 +76,20 @@ export class InferenceFailedError extends PixelsmithError {
     super('inference_failed', 502, `Inference failed: ${detail}`)
   }
 }
+
+export class MalformedPdfError extends PixelsmithError {
+  constructor(detail: string) {
+    super('malformed_pdf', 422, `PDF could not be read: ${detail}`)
+  }
+}
+
+export class EncryptedPdfError extends PixelsmithError {
+  constructor() {
+    // Not a failure of ours: the document is locked and we were given no key.
+    super(
+      'encrypted_pdf',
+      422,
+      'This PDF is password-protected. Remove the password with the Unlock tool first, then try again.',
+    )
+  }
+}
