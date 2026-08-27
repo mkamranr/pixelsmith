@@ -23,7 +23,7 @@ COPY tsconfig.base.json tsconfig.json ./
 COPY packages packages
 COPY apps apps
 COPY workers workers
-RUN npx tsc -b && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev
 
 FROM node:22.17.1-bookworm-slim AS runtime
 WORKDIR /app

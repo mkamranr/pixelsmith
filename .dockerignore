@@ -1,12 +1,18 @@
 node_modules
 **/node_modules
 **/dist
+# Incremental build state must never enter the build context. With it present,
+# `tsc -b` inside the image reads it, concludes everything is already compiled
+# and emits nothing — while dist itself is excluded, leaving an image with no
+# compiled output. It only breaks when building from an already-built tree, so
+# a clean clone would hide it.
+**/*.tsbuildinfo
 data
 .venv-inference
 infra/bundle/out
 .git
 tests/fixtures/tmp
 *.log
-# NOTE: assets/vendor/models is deliberately NOT excluded — the inference
-# image COPYs the weights from the build context. Excluding them here would
-# make that COPY fail.
+# The inference image fetches and verifies its own weights during the build,
+# so there is no reason to ship 180MB of them into the build context.
+assets/vendor/models

@@ -119,10 +119,49 @@ export interface Tool<P = any> {
    * route does not require a file.
    */
   inputMode?: 'files' | 'none'
+  /**
+   * Skip the deep content check for this tool.
+   *
+   * The probe's job is to refuse encrypted or damaged documents, but Unlock and
+   * Repair exist precisely to handle those — being protected from the input
+   * would make them impossible. The cheap guards still apply: the type is still
+   * sniffed from the bytes and the size limit is still enforced. Only the parse
+   * is skipped.
+   */
+  skipProbe?: boolean
   /** Input type is loose: `.default()` makes fields optional pre-parse. */
   params: ZodType<P, ZodTypeDef, any>
   ui: ToolUi
   run(ctx: OpContext<P>): Promise<OutputFile[]>
+}
+
+/** Mime prefixes that make up the Office/OpenDocument family. */
+const OFFICE_HINTS = ['officedocument', 'opendocument', 'x-cfb', 'rtf']
+
+/**
+ * Describe a tool's accepted input in words a person can act on.
+ *
+ * "merge-pdf cannot process image/png" is accurate and useless; "Merge PDF
+ * works on PDF documents" tells the user what to do instead. Used for the
+ * upload control's hint and for the error, so the two always agree.
+ */
+export function describeAccepts(tool: Tool): string {
+  if (tool.inputMode === 'none') return 'no files — it builds one from the settings'
+
+  const kinds: string[] = []
+  if (tool.accepts.includes('application/pdf')) kinds.push('PDF documents')
+  if (tool.accepts.some((m) => m.startsWith('image/'))) kinds.push('images')
+  if (tool.accepts.some((m) => OFFICE_HINTS.some((hint) => m.includes(hint)))) {
+    kinds.push('Word, Excel, PowerPoint and OpenDocument files')
+  }
+  if (kinds.length === 0) return 'files of a supported type'
+  if (kinds.length === 1) return kinds[0]!
+  return `${kinds.slice(0, -1).join(', ')} or ${kinds[kinds.length - 1]}`
+}
+
+/** The value for a file input's `accept` attribute. */
+export function acceptAttribute(tool: Tool): string {
+  return tool.accepts.join(',')
 }
 
 export interface Registry {

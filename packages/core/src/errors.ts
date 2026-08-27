@@ -31,8 +31,16 @@ export class UnsupportedInputError extends PixelsmithError {
   constructor(
     readonly toolId: string,
     readonly mime: string,
+    /** What the tool does take, in words. Turns a dead end into a next step. */
+    expected?: string,
   ) {
-    super('unsupported_input', 415, `${toolId} cannot process ${mime}`)
+    super(
+      'unsupported_input',
+      415,
+      expected
+        ? `That file is ${mime}. ${toolId} works on ${expected}.`
+        : `${toolId} cannot process ${mime}`,
+    )
   }
 }
 

@@ -191,14 +191,48 @@ An empty allowlist refuses all URL rendering; pasted HTML always works.
 
 ## Confirming the air gap
 
-The `internal` compose network is declared `internal: true`, so Redis, the
-runners and the inference sidecar have no route off the host. To confirm that on
-the live deployment:
+Two different guarantees, and it is worth being precise about which is which.
+
+**Guaranteed by construction.** Redis, the runners and the inference sidecar are
+attached only to the `internal` network, declared `internal: true`. Docker gives
+that network no NAT, so those containers have no route off the host regardless of
+what the host itself can reach. Everything that opens your files — every image
+operation, every PDF operation, every model — runs there.
+
+**Depends on the host.** `api` is additionally attached to `edge`, because a
+published port cannot be routed into an `internal: true` network. Its outbound
+reachability is therefore whatever the host's is: on an air-gapped server, none.
+If the host does have an upstream route and you want that closed too, block it in
+the host firewall — the API never makes an outbound connection of its own.
+
+To check it on the live deployment, using only what is already inside the images
+(no image to pull, so this works on the isolated host):
 
 ```bash
-docker run --rm --network pixelsmith_internal alpine:3.20 \
-  sh -c 'timeout 5 wget -q -O- http://1.1.1.1 || echo "no egress (correct)"'
+# Pick a target you know answers. On a truly isolated network, nothing will,
+# and the control below is what tells you the test is meaningful at all.
+TARGET=1.1.1.1
+
+# The processing tier: expect a timeout.
+docker compose exec runner node -e "
+const s=require('net').connect({host:'$TARGET',port:443,timeout:6000});
+s.on('connect',()=>{console.log('CONNECTED - egress exists');process.exit(1)});
+s.on('timeout',()=>{console.log('no egress (correct)');process.exit(0)});
+s.on('error',e=>{console.log('no egress (correct):',e.code);process.exit(0)});"
+
+# The model tier: expect a timeout.
+docker compose exec inference python3 -c "
+import socket,sys
+s=socket.socket(); s.settimeout(6)
+try: s.connect(('$TARGET',443)); print('CONNECTED - egress exists'); sys.exit(1)
+except Exception as e: print('no egress (correct):', type(e).__name__)"
 ```
+
+Run the same connect from the host first. If the host cannot reach the target
+either, a timeout in the container proves nothing — you have measured a dead
+target, not an air gap. Do not use `wget`/`curl` for this: neither is installed
+in these images, so `wget ... || echo "no egress"` reports success because the
+binary is missing.
 
 Only `api` is published, and only on the address in `PUBLISH_ADDR`. The pages
 themselves load no external resource: the Content-Security-Policy is

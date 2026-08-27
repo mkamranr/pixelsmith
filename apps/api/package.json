@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/server.js",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node scripts/copy-views.mjs && node scripts/copy-vendor.mjs",
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "start": "node dist/server.js"
   },

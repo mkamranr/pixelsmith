@@ -15,13 +15,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/inference/requirements.txt ./
-RUN pip install --no-cache-dir --require-hashes=false -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/inference/*.py ./
-# Verified weights, baked in. Read-only at runtime.
-COPY assets/vendor/models /models
 
-RUN useradd --system --uid 1001 --create-home inference && chown -R inference /srv
+# Model weights.
+#
+# Fetched here, during the build, and verified against the SHA-256 values
+# pinned in the manifest. That keeps a fresh checkout buildable with one
+# command while still refusing a substituted or corrupted model — which is the
+# only moment such a substitution can be caught, since the deployed machine has
+# no network to re-download from.
+COPY infra/bundle/assets.manifest infra/bundle/fetch-assets.sh /build/infra/bundle/
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && cd /build && bash infra/bundle/fetch-assets.sh \
+    && mkdir -p /models && cp -r /build/assets/vendor/models/. /models/ \
+    && rm -rf /build \
+    && apt-get purge -y curl && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Its own uid, so a model exploit is not also a job-store compromise, but the
+# group that owns /data, because it writes results into the shared volume.
+RUN if ! getent group 1000 >/dev/null; then groupadd --gid 1000 shared; fi \
+    && useradd --system --uid 1001 --gid 1000 --create-home inference \
+    && chown -R 1001:1000 /srv
 USER inference
 
 ENV PIXELSMITH_MODEL_DIR=/models \

@@ -63,7 +63,10 @@ describe('the two tool families', () => {
       const generates = tool.inputMode === 'none'
       const takesPdf = tool.accepts.includes('application/pdf')
       const takesImages = tool.accepts.some((mime) => mime.startsWith('image/'))
-      expect(generates || takesPdf || takesImages).toBe(true)
+      const takesDocuments = tool.accepts.some((mime) =>
+        ['officedocument', 'opendocument', 'x-cfb', 'rtf'].some((hint) => mime.includes(hint)),
+      )
+      expect(generates || takesPdf || takesImages || takesDocuments).toBe(true)
       // A generator must not also claim to accept uploads.
       if (generates) expect(tool.accepts).toEqual([])
     }

@@ -36,7 +36,12 @@ function standardFontDataUrl(): string {
   return `${join(dirname(entry), 'standard_fonts')}/`
 }
 
-async function openDocument(path: string) {
+/**
+ * The one place an untrusted PDF is handed to pdf.js. Exported so text
+ * extraction shares these settings rather than growing a second, subtly
+ * different set of them.
+ */
+export async function openDocument(path: string) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const data = new Uint8Array(await readFile(path))
   try {

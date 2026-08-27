@@ -3,6 +3,18 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { z } from 'zod'
 
+/**
+ * An environment variable set to the empty string means "not set".
+ *
+ * Docker Compose has no way to express an absent variable: `${FOO:-}` passes
+ * `FOO=""`. A schema that only tolerates an absent variable therefore refuses
+ * to start under Compose, which is exactly how this was found — the API
+ * crash-looped on `COOKIE_SECRET: String must contain at least 32 characters`
+ * for a secret nobody had set.
+ */
+const orUnset = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional())
+
 const bool = z
   .union([z.boolean(), z.string()])
   .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())))
@@ -26,7 +38,7 @@ const ConfigSchema = z.object({
   AUTH_MODE: z.enum(['open', 'accounts']).default('open'),
 
   /** Signs the session cookie. Required in production; generated in dev. */
-  COOKIE_SECRET: z.string().min(32).optional(),
+  COOKIE_SECRET: orUnset(z.string().min(32)),
   SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
 
   /** `inline` needs no Redis, which is what makes local development possible. */
@@ -40,8 +52,8 @@ const ConfigSchema = z.object({
   MAX_FILES_PER_JOB: z.coerce.number().int().positive().default(30),
 
   /** Creates the first admin on an empty database, then never again. */
-  BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
-  BOOTSTRAP_ADMIN_PASSWORD: z.string().optional(),
+  BOOTSTRAP_ADMIN_EMAIL: orUnset(z.string().email()),
+  BOOTSTRAP_ADMIN_PASSWORD: orUnset(z.string()),
 
   /**
    * Hosts the HTML renderer may fetch, comma separated. Empty — the default —
@@ -49,21 +61,21 @@ const ConfigSchema = z.object({
    */
   ALLOWED_RENDER_HOSTS: z.string().default(''),
   /** Set when the container bundles its own Chromium. */
-  CHROMIUM_PATH: z.string().optional(),
+  CHROMIUM_PATH: orUnset(z.string()),
 
   /**
    * Paths to the bundled document tools. Absent means the features that need
    * them report themselves unavailable, rather than failing obscurely.
    */
-  QPDF_PATH: z.string().optional(),
-  SOFFICE_PATH: z.string().optional(),
-  TESSERACT_PATH: z.string().optional(),
+  QPDF_PATH: orUnset(z.string()),
+  SOFFICE_PATH: orUnset(z.string()),
+  TESSERACT_PATH: orUnset(z.string()),
 
   /**
    * Base URL of the inference sidecar. Unset means the machine-learning tools
    * report themselves unavailable instead of failing obscurely.
    */
-  INFERENCE_URL: z.string().optional(),
+  INFERENCE_URL: orUnset(z.string()),
 
   TRUST_PROXY: bool.default(false),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -72,14 +84,15 @@ const ConfigSchema = z.object({
 export type Config = ReturnType<typeof loadConfig>
 
 /**
- * A stable cookie secret for development.
+ * A stable cookie secret, generated on first start and kept in the data volume.
  *
- * Generating a fresh one per start signs every user out on every restart, and
- * leaves orphaned session rows behind. Production requires COOKIE_SECRET to be
- * set explicitly (see below); this only covers the local case, and the file is
- * written owner-only.
+ * Generating a fresh one per start would sign every user out on every restart,
+ * which is why it is persisted. Requiring the operator to invent one was a
+ * setup wall with no security benefit: a random 32-byte value written
+ * owner-only is stronger than most hand-typed secrets, and setting
+ * COOKIE_SECRET explicitly still overrides it.
  */
-function developmentCookieSecret(dataDir: string): string {
+function persistedCookieSecret(dataDir: string): string {
   const path = resolve(dataDir, '.cookie-secret')
   try {
     if (existsSync(path)) {
@@ -104,18 +117,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   }
   const raw = parsed.data
 
-  if (raw.NODE_ENV === 'production' && !raw.COOKIE_SECRET) {
-    // Failing loudly here beats silently rotating everyone's session on restart.
-    throw new Error('COOKIE_SECRET must be set in production (32+ characters)')
-  }
-
   const dataDir = resolve(raw.DATA_DIR)
 
   return {
     ...raw,
     dataDir,
     databasePath: resolve(dataDir, 'pixelsmith.sqlite'),
-    cookieSecret: raw.COOKIE_SECRET ?? developmentCookieSecret(dataDir),
+    cookieSecret: raw.COOKIE_SECRET ?? persistedCookieSecret(dataDir),
     sessionTtlMs: raw.SESSION_TTL_HOURS * 60 * 60 * 1000,
     retentionMs: raw.RETENTION_HOURS * 60 * 60 * 1000,
     sweepIntervalMs: raw.SWEEP_INTERVAL_MINUTES * 60 * 1000,

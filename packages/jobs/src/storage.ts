@@ -1,4 +1,4 @@
-import { mkdir, readdir, realpath, rm } from 'node:fs/promises'
+import { chmod, mkdir, readdir, realpath, rm } from 'node:fs/promises'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 import { UnsafePathError } from './errors.js'
 
@@ -57,6 +57,14 @@ export function jobStorage(root: string) {
       const p = this.paths(id)
       await mkdir(p.inDir, { recursive: true })
       await mkdir(p.outDir, { recursive: true })
+
+      // The inference sidecar is a different container running as a different
+      // uid, and it writes its result directly into this directory. mkdir's
+      // mode argument is masked by the umask, so the group write bit has to be
+      // set explicitly afterwards or the sidecar reads the input and then fails
+      // on the write. The group holds only this stack's own services.
+      await chmod(p.inDir, 0o775)
+      await chmod(p.outDir, 0o775)
       return p
     },
 

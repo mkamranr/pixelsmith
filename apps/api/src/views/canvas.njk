@@ -45,15 +45,36 @@
     </button>
 
     <div class="dropzone" data-dropzone>
-      <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+      <input type="file" id="files" name="files" multiple accept="{{ tool.acceptAttribute }}" data-file-input
              {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
       <label for="files" class="dropzone-label">
         <span class="dropzone-icon" aria-hidden="true">{{ ic.icon(tool.ui.icon, 38) }}</span>
-        <strong>Choose images</strong>
+        <strong>{% if tool.family == 'pdf' %}Choose files{% else %}Choose images{% endif %}</strong>
         <span class="muted">or drag and drop them here</span>
-        <span class="dropzone-meta">JPEG, PNG, WebP, AVIF, TIFF, HEIC · up to {{ maxFiles }} files · {{ maxUploadMb }} MB each</span>
+        <span class="dropzone-meta">Takes {{ tool.acceptsDescription }} · up to {{ maxFiles }} files · {{ maxUploadMb }} MB each</span>
       </label>
     </div>
+
+    {% if tool.family == 'pdf' %}
+    {#
+      Page thumbnails, rendered in the browser by pdf.js. A PDF has no single
+      image to show, and every tool here that takes a page range is far easier
+      to use when you can see the pages you are choosing between.
+    #}
+    <section class="pdf-pages" data-pdf-pages hidden
+             data-pdfjs="/static/vendor/pdfjs/pdf.min.mjs"
+             data-pdfjs-worker="/static/vendor/pdfjs/pdf.worker.min.mjs">
+      <div class="pdf-pages-head">
+        <h2 class="pdf-pages-title">Pages</h2>
+        <p class="pdf-pages-hint" data-pdf-hint></p>
+        <div class="pdf-pages-actions" data-pdf-actions hidden>
+          <button type="button" class="btn btn-quiet btn-sm" data-pdf-all>Select all</button>
+          <button type="button" class="btn btn-quiet btn-sm" data-pdf-none>Clear</button>
+        </div>
+      </div>
+      <ol class="pdf-grid" data-pdf-grid></ol>
+    </section>
+    {% endif %}
 
     <div class="canvas-view" data-view hidden>
       <div class="canvas-plate" data-plate>
@@ -94,5 +115,6 @@
 </form>
 
 <script src="/static/canvas.js" defer></script>
+{% if tool.family == 'pdf' %}<script src="/static/pdfpages.js" defer></script>{% endif %}
 {% endif %}
 {% endblock %}

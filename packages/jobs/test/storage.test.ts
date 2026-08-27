@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -123,5 +123,31 @@ describe('listJobDirs', () => {
 
   it('returns nothing when no jobs have ever been created', async () => {
     expect(await store.listJobDirs()).toEqual([])
+  })
+})
+
+/**
+ * The ML sidecar is a separate container running as a different uid, and it
+ * writes its result straight into the job's out directory. Directories created
+ * with the default umask are rwxr-xr-x, so the sidecar can read the input and
+ * then fail on the write — which is what happened: "could not write image".
+ * The two services share a group instead, so the group write bit is what makes
+ * the shared volume actually shared.
+ */
+describe('job directories are writable by the sidecar that shares the volume', () => {
+  it('creates the input and output directories group-writable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pixelsmith-modes-'))
+    try {
+      const storage = jobStorage(root)
+      const id = '7f1c8a52-3d64-4b21-9f0e-2c5a8b7d1e34'
+      const paths = await storage.prepare(id)
+
+      for (const dir of [paths.inDir, paths.outDir]) {
+        const mode = (await stat(dir)).mode & 0o777
+        expect(mode & 0o020, `${dir} is ${mode.toString(8)}, group cannot write`).not.toBe(0)
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

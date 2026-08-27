@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type { FastifyInstance } from 'fastify'
 import { isPixelsmithError } from '@pixelsmith/contracts'
-import { deriveName, probeImage } from '@pixelsmith/core'
+import { acceptAttribute, deriveName, describeAccepts, probeForTool, probeImage } from '@pixelsmith/core'
 import type { AppContext } from '../context.js'
 import { BadRequestError, NotFoundError, TooManyFilesError } from '../errors.js'
 import { coerceFormParams } from '../params.js'
@@ -20,7 +20,13 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
   app.get('/tools/:toolId', async (req, reply) => {
     const { toolId } = req.params as { toolId: string }
     if (!ctx.registry.has(toolId)) throw new NotFoundError('Tool')
-    const tool = ctx.registry.get(toolId)
+    const base = ctx.registry.get(toolId)
+    // Decorated for the template: the picker's accept list and a description of
+    // it in words, both derived from the tool's own declared types.
+    const tool = Object.assign(Object.create(Object.getPrototypeOf(base)), base, {
+      acceptAttribute: acceptAttribute(base),
+      acceptsDescription: describeAccepts(base),
+    })
     const q = req.query as { error?: string; from?: string }
 
     /**
@@ -183,16 +189,17 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
       // rather than discovering it in a worker.
       const { dir } = await ensurePaths()
       const inputs = []
-      // Supporting files are probed with the same rigour as inputs: a logo is
-      // still an untrusted upload heading for a decoder.
-      for (const [role, list] of [
-        ['input', staged],
-        ['asset', stagedAssets],
-      ] as const) {
-        for (const file of list) {
-          const probe = await probeImage(join(dir, file.relPath))
-          inputs.push({ role, name: file.name, relPath: file.relPath, mime: probe.mime, bytes: probe.bytes })
-        }
+      for (const file of staged) {
+        // The same validator the worker uses, so nothing passes intake only to
+        // fail inside the job.
+        const probe = await probeForTool(tool, join(dir, file.relPath))
+        inputs.push({ role: 'input' as const, name: file.name, relPath: file.relPath, mime: probe.mime, bytes: probe.bytes })
+      }
+      // Supporting files are pictures whatever the tool takes — a watermark
+      // logo is a logo — and are probed with the same rigour as inputs.
+      for (const file of stagedAssets) {
+        const probe = await probeImage(join(dir, file.relPath))
+        inputs.push({ role: 'asset' as const, name: file.name, relPath: file.relPath, mime: probe.mime, bytes: probe.bytes })
       }
 
       const params = ctx.registry.parseParams(toolId, coerceFormParams(tool, fields))

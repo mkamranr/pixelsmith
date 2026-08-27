@@ -40,7 +40,7 @@
       </div>
 
       <div class="dropzone" data-dropzone>
-        <input type="file" id="files" name="files" multiple accept="image/*" data-file-input
+        <input type="file" id="files" name="files" multiple accept="{{ tool.acceptAttribute }}" data-file-input
              {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
         <label for="files" class="dropzone-label">
           <span class="dropzone-icon" aria-hidden="true">

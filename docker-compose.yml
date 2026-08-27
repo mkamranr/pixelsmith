@@ -22,15 +22,16 @@ services:
     <<: *common
     image: pixelsmith/api:${PIXELSMITH_VERSION:-0.1.0}
     build:
-      context: ../..
+      context: .
       dockerfile: infra/docker/api.Dockerfile
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "8080"
       DATA_DIR: /data
-      # Required in production; install.sh generates it.
-      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET must be set - run install.sh}
+      # Optional. Left unset, the API generates one on first start and keeps it
+      # in the data volume, so restarts do not sign everyone out.
+      COOKIE_SECRET: ${COOKIE_SECRET:-}
       QUEUE_DRIVER: redis
       REDIS_URL: redis://redis:6379
       RETENTION_HOURS: ${RETENTION_HOURS:-2}
@@ -40,6 +41,8 @@ services:
       # Empty by default: URL rendering stays refused until an operator
       # deliberately allowlists an internal host.
       ALLOWED_RENDER_HOSTS: ${ALLOWED_RENDER_HOSTS:-}
+      # `open` needs no sign-in at all; `accounts` restores per-user login.
+      AUTH_MODE: ${AUTH_MODE:-open}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       TRUST_PROXY: ${TRUST_PROXY:-false}
@@ -49,7 +52,7 @@ services:
     ports:
       # Bound to localhost by default: put your own TLS proxy in front, or set
       # PUBLISH_ADDR=0.0.0.0 if the host firewall is the boundary.
-      - "${PUBLISH_ADDR:-127.0.0.1}:${PUBLISH_PORT:-8080}:8080"
+      - "${PUBLISH_ADDR:-0.0.0.0}:${PUBLISH_PORT:-8080}:8080"
     networks: [edge, internal]
     depends_on:
       redis: { condition: service_healthy }
@@ -60,7 +63,7 @@ services:
     <<: *common
     image: pixelsmith/runner:${PIXELSMITH_VERSION:-0.1.0}
     build:
-      context: ../..
+      context: .
       dockerfile: infra/docker/runner.Dockerfile
     environment:
       NODE_ENV: production
@@ -98,7 +101,7 @@ services:
     <<: *common
     image: pixelsmith/inference:${PIXELSMITH_VERSION:-0.1.0}
     build:
-      context: ../..
+      context: .
       dockerfile: infra/docker/inference.Dockerfile
     environment:
       PIXELSMITH_MODEL_DIR: /models

@@ -9,6 +9,7 @@ import { pdfCrop } from '../src/tools/pdf-crop.js'
 import { imagesToPdf } from '../src/tools/pdf-from-images.js'
 import { runTool } from '../src/run.js'
 import { inkInRegion } from './helpers/pdfink.js'
+import { extractPdfText } from '../src/pdf-text.js'
 import * as fx from './helpers/fixtures.js'
 
 let dir: string
@@ -182,5 +183,43 @@ describe('images to PDF', () => {
     expect(imagesToPdf.family).toBe('pdf')
     expect(imagesToPdf.accepts).toContain('image/jpeg')
     expect(imagesToPdf.accepts).not.toContain('application/pdf')
+  })
+})
+
+/**
+ * Arabic is a first-class need here, and pdf-lib's standard fonts throw
+ * `WinAnsi cannot encode` on it — so this stamped nothing and failed the job
+ * with a bare internal error.
+ */
+describe('watermarking a PDF in a script the standard fonts cannot encode', () => {
+  it('stamps Arabic text across the page', async () => {
+    const src = await blankPdf('arabic-wm.pdf', 1)
+    const outs = await run(pdfWatermark, [src], { text: 'سري للغاية' })
+
+    expect(await inkInRegion(outs[0]!.path, 1, MIDDLE)).toBeGreaterThan(2)
+  })
+
+  it('tiles Arabic text too, reaching both edges of the page', async () => {
+    const src = await blankPdf('arabic-tiled.pdf', 1)
+    const outs = await run(pdfWatermark, [src], { text: 'سري للغاية', tiled: true })
+
+    /**
+     * A fifth of the page at each edge, not a tenth: the lattice has gaps
+     * between its rows by design, and a short mark's gaps are wide enough that
+     * a narrow band can legitimately fall in one. What matters is that the
+     * pattern reaches the edges at all — leaving a clean strip at the top is
+     * the first thing someone cropping the page would exploit.
+     */
+    const topFifth = { x: 0.05, y: 0, width: 0.9, height: 0.2 }
+    const bottomFifth = { x: 0.05, y: 0.8, width: 0.9, height: 0.2 }
+    expect(await inkInRegion(outs[0]!.path, 1, topFifth)).toBeGreaterThan(2)
+    expect(await inkInRegion(outs[0]!.path, 1, bottomFifth)).toBeGreaterThan(2)
+  })
+
+  it('still writes Latin text as selectable text, not as a picture of text', async () => {
+    const src = await blankPdf('latin-wm.pdf', 1)
+    const outs = await run(pdfWatermark, [src], { text: 'CONFIDENTIAL' })
+
+    expect((await extractPdfText(outs[0]!.path))[0]).toContain('CONFIDENTIAL')
   })
 })

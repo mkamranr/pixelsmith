@@ -1,21 +1,21 @@
 import { stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { degrees, rgb, StandardFonts } from 'pdf-lib'
 import { z } from 'zod'
 import { parsePageRanges } from '../pages.js'
 import { loadPdf, PDF_MIME } from '../pdf.js'
+import { preparePdfText, type PdfTextMark } from '../pdf-draw-text.js'
 import { uniqueName } from '../naming.js'
 import { stripControlChars } from '../text.js'
 import type { Tool } from '../registry.js'
 
-/** Convert #rrggbb to the 0..1 components pdf-lib expects. */
-function toRgb(hex: string) {
+/** Convert #rrggbb to the 0..1 components a mark expects. */
+function toComponents(hex: string) {
   const value = hex.replace('#', '')
-  return rgb(
-    parseInt(value.slice(0, 2), 16) / 255,
-    parseInt(value.slice(2, 4), 16) / 255,
-    parseInt(value.slice(4, 6), 16) / 255,
-  )
+  return {
+    r: parseInt(value.slice(0, 2), 16) / 255,
+    g: parseInt(value.slice(2, 4), 16) / 255,
+    b: parseInt(value.slice(4, 6), 16) / 255,
+  }
 }
 
 export const PdfWatermarkParams = z.object({
@@ -58,19 +58,29 @@ export const pdfWatermark: Tool<PdfWatermarkParams> = {
     const taken = new Set<string>()
     const outputs = []
     const opacity = params.opacity / 100
-    const colour = toRgb(params.color)
+    const colour = toComponents(params.color)
 
     for (const [index, input] of inputs.entries()) {
       const doc = await loadPdf(input.path)
-      const font = await doc.embedFont(StandardFonts.HelveticaBold)
       const selected = parsePageRanges(params.pages, doc.getPageCount())
       const text = stripControlChars(params.text)
+      /**
+       * Marks are prepared per type size and reused. Pages of one document are
+       * usually the same size, and for text outside Latin-1 preparing a mark
+       * means rendering it — not something to repeat 500 times.
+       */
+      const marks = new Map<number, PdfTextMark>()
 
       for (const pageNumber of selected) {
         const page = doc.getPage(pageNumber - 1)
         const { width, height } = page.getSize()
         const size = params.fontSize ?? Math.max(18, Math.round(width / 12))
-        const textWidth = font.widthOfTextAtSize(text, size)
+
+        let mark = marks.get(size)
+        if (!mark) {
+          mark = await preparePdfText(doc, { text, size, colour, bold: true })
+          marks.set(size, mark)
+        }
 
         if (params.tiled) {
           /**
@@ -80,24 +90,19 @@ export const pdfWatermark: Tool<PdfWatermarkParams> = {
            * left the top of every page unmarked, which is the first place
            * someone would crop.
            */
-          const stepX = Math.max(textWidth * 1.4, 120)
+          const stepX = Math.max(mark.width * 1.4, 120)
           const stepY = Math.max(size * 3.2, 90)
           for (let y = -stepY; y < height + stepY; y += stepY) {
             for (let x = -stepX / 2; x < width + stepX; x += stepX) {
-              page.drawText(text, {
-                x, y, size, font, color: colour, opacity, rotate: degrees(params.rotation),
-              })
+              mark.draw(page, { x, y, opacity, rotate: params.rotation })
             }
           }
         } else {
-          page.drawText(text, {
-            x: (width - textWidth) / 2,
+          mark.draw(page, {
+            x: (width - mark.width) / 2,
             y: height / 2,
-            size,
-            font,
-            color: colour,
             opacity,
-            rotate: degrees(params.rotation),
+            rotate: params.rotation,
           })
         }
       }

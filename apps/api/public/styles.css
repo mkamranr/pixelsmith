@@ -1277,3 +1277,92 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 }
 .family .group { margin: var(--s-5) 0; }
 .family .group-head h3 { font-size: var(--fs-md); margin: 0 0 2px; font-weight: 600; }
+
+/* ---- PDF page thumbnails ---------------------------------------------- */
+/* Rendered in the browser by pdf.js, so a page range can be chosen by
+   clicking rather than typed from memory. */
+.pdf-pages {
+  margin-top: 18px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.pdf-pages-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+
+.pdf-pages-title { font-size: 0.9375rem; margin: 0; }
+.pdf-pages-hint { margin: 0; font-size: 0.8125rem; color: var(--text-muted); flex: 1 1 12rem; }
+.pdf-pages-actions { display: flex; gap: 6px; margin-left: auto; }
+
+.pdf-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.pdf-page { margin: 0; }
+
+.pdf-page-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 8px;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.pdf-page-button:disabled { cursor: default; }
+.pdf-page-button:hover:not(:disabled) { border-color: var(--border-strong); }
+
+.pdf-page-button.is-chosen {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pdf-page-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* White ground, so a page with transparent areas still reads as paper. */
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(16, 18, 26, 0.18);
+}
+
+.pdf-page-number {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* The click order, which is what a reordering tool applies. */
+.pdf-page-order {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 22px;
+  padding: 2px 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}

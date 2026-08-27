@@ -29,7 +29,7 @@ COPY tsconfig.base.json tsconfig.json ./
 COPY packages packages
 COPY apps apps
 COPY workers workers
-RUN npx tsc -b
+RUN npm run build
 
 # Drop dev dependencies from what will be copied forward.
 RUN npm prune --omit=dev

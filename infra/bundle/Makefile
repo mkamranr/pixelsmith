@@ -13,7 +13,7 @@ ROOT := $(shell cd ../.. && pwd)
 VERSION ?= 0.1.0
 PLATFORM ?= linux/amd64
 OUT := $(ROOT)/infra/bundle/out/pixelsmith-$(VERSION)
-COMPOSE := $(ROOT)/infra/compose/docker-compose.yml
+COMPOSE := $(ROOT)/docker-compose.yml
 
 IMAGES := pixelsmith/api:$(VERSION) pixelsmith/runner:$(VERSION) pixelsmith/inference:$(VERSION) redis:7.4-alpine
 
@@ -27,7 +27,7 @@ assets:
 
 images: assets
 	@echo "==> Building images for $(PLATFORM)"
-	cd $(ROOT)/infra/compose && \
+	cd $(ROOT) && \
 	  PIXELSMITH_VERSION=$(VERSION) COOKIE_SECRET=build-time-placeholder \
 	  docker compose -f $(COMPOSE) build
 	@echo "==> Pulling Redis so it ships with the bundle too"
@@ -55,7 +55,7 @@ bundle: images
 # tries to phone home, it fails here rather than on the isolated server.
 verify:
 	@echo "==> Starting with egress blocked"
-	cd $(ROOT)/infra/compose && \
+	cd $(ROOT) && \
 	  PIXELSMITH_VERSION=$(VERSION) COOKIE_SECRET=$$(openssl rand -hex 32) \
 	  docker compose -f $(COMPOSE) up -d
 	@echo "==> Waiting for health"
@@ -67,7 +67,7 @@ verify:
 	@echo "==> Confirming the internal network has no route out"
 	@docker run --rm --network pixelsmith_internal alpine:3.20 \
 	   sh -c 'timeout 5 wget -q -O- http://1.1.1.1 2>&1; test $$? -ne 0 && echo "    no egress from internal network (correct)"'
-	cd $(ROOT)/infra/compose && docker compose -f $(COMPOSE) down
+	cd $(ROOT) && docker compose -f $(COMPOSE) down
 
 clean:
 	rm -rf $(ROOT)/infra/bundle/out

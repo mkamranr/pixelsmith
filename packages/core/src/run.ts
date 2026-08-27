@@ -1,9 +1,16 @@
-import { mkdir } from 'node:fs/promises'
+import { chmod, mkdir, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { DEFAULT_LIMITS, probeImage, sniffMime, type ProbeLimits } from './probe.js'
 import { DEFAULT_PDF_LIMITS, PDF_MIME, probePdf, type PdfLimits } from './pdf.js'
-import { InvalidParamsError, UnsupportedInputError } from './errors.js'
-import { DEFAULT_SETTINGS, type InputFile, type OutputFile, type RuntimeSettings, type Tool } from './registry.js'
+import { InvalidParamsError, LimitExceededError, MalformedPdfError, UnsupportedInputError } from './errors.js'
+import {
+  DEFAULT_SETTINGS,
+  describeAccepts,
+  type InputFile,
+  type OutputFile,
+  type RuntimeSettings,
+  type Tool,
+} from './registry.js'
 
 /** A staged input: where it lives on disk, and what to call the result. */
 export interface RunToolInput {
@@ -37,6 +44,46 @@ export interface RunToolArgs {
  * tools each remembering to check their own inputs is thirteen chances to
  * forget; doing it once at the gate is how the guarantee actually holds.
  */
+/**
+ * Validate one input against a tool's declared types.
+ *
+ * Exported and used by both the run gate and the upload route on purpose: when
+ * intake validated with one rule and the worker with another, a PDF passed
+ * upload and then failed inside the job — and PDFs could not be uploaded at all
+ * because intake assumed every file was an image. Two authorities on what is
+ * acceptable is one too many.
+ */
+export async function probeForTool(
+  tool: Tool,
+  path: string,
+  options: { limits?: ProbeLimits; pdfLimits?: PdfLimits } = {},
+): Promise<{ mime: string; bytes: number }> {
+  const limits = options.limits ?? DEFAULT_LIMITS
+  const pdfLimits = options.pdfLimits ?? DEFAULT_PDF_LIMITS
+  const sniffed = await sniffMime(path)
+
+  const accepted = tool.accepts.includes('*') || tool.accepts.includes(sniffed)
+  if (!accepted) {
+    throw new UnsupportedInputError(tool.title, sniffed, describeAccepts(tool))
+  }
+
+  if (tool.skipProbe) {
+    /**
+     * Unlock, Repair and the Office converters exist to handle files the deep
+     * check would reject. The cheap guards still apply: the type comes from the
+     * bytes and the size limit is enforced. Only the parse is skipped.
+     */
+    const { size } = await stat(path)
+    const ceiling = sniffed === PDF_MIME ? pdfLimits.maxBytes : limits.maxBytes
+    if (size === 0) throw new MalformedPdfError('file is empty')
+    if (size > ceiling) throw new LimitExceededError('maxBytes', `${size} bytes exceeds ${ceiling}`)
+    return { mime: sniffed, bytes: size }
+  }
+
+  const probe = sniffed === PDF_MIME ? await probePdf(path, pdfLimits) : await probeImage(path, limits)
+  return { mime: probe.mime, bytes: probe.bytes }
+}
+
 export async function runTool(tool: Tool, args: RunToolArgs): Promise<OutputFile[]> {
   const limits = args.limits ?? DEFAULT_LIMITS
   const pdfLimits = args.pdfLimits ?? DEFAULT_PDF_LIMITS
@@ -61,18 +108,18 @@ export async function runTool(tool: Tool, args: RunToolArgs): Promise<OutputFile
      * container with an object graph, not a raster: it needs page-count and
      * encryption checks where an image needs pixel and decompression-bomb ones.
      */
-    const sniffed = await sniffMime(path)
-    const probe = sniffed === PDF_MIME ? await probePdf(path, pdfLimits) : await probeImage(path, limits)
-
-    if (!tool.accepts.includes('*') && !tool.accepts.includes(probe.mime)) {
-      throw new UnsupportedInputError(tool.id, probe.mime)
-    }
+    const probe = await probeForTool(tool, path, { limits, pdfLimits })
     inputs.push({ path, name: displayName, mime: probe.mime, bytes: probe.bytes })
   }
 
   // Every tool writes here, so create it once rather than trusting thirteen
   // implementations to each remember.
   await mkdir(args.outDir, { recursive: true })
+
+  // Group write, so the inference sidecar's uid can write results here too.
+  // Best-effort: if this process does not own the directory then whoever
+  // created it already set the mode, and failing the job here would be wrong.
+  await chmod(args.outDir, 0o775).catch(() => {})
 
   return tool.run({
     inputs,

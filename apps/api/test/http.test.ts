@@ -453,3 +453,86 @@ describe('comparing input against output', () => {
     expect(jobPage.body).not.toContain('data-compare')
   })
 })
+
+describe('the upload control matches what the tool accepts', () => {
+  it('offers PDFs, not images, on a PDF tool', async () => {
+    const { cookie } = await signIn(h, 'accept-pdf@example.test')
+    const res = await h.app.inject({ method: 'GET', url: '/tools/merge-pdf', headers: { cookie } })
+    const accept = /<input type="file"[^>]*accept="([^"]*)"/.exec(res.body)?.[1] ?? ''
+    expect(accept).toContain('application/pdf')
+    expect(accept).not.toContain('image/*')
+  })
+
+  it('offers images on an image tool', async () => {
+    const { cookie } = await signIn(h, 'accept-img@example.test')
+    const res = await h.app.inject({ method: 'GET', url: '/tools/resize', headers: { cookie } })
+    const accept = /<input type="file"[^>]*accept="([^"]*)"/.exec(res.body)?.[1] ?? ''
+    expect(accept).toContain('image/jpeg')
+    expect(accept).not.toContain('application/pdf')
+  })
+
+  it('offers Office documents on the Office converter', async () => {
+    const { cookie } = await signIn(h, 'accept-office@example.test')
+    const res = await h.app.inject({ method: 'GET', url: '/tools/office-to-pdf', headers: { cookie } })
+    const accept = /<input type="file"[^>]*accept="([^"]*)"/.exec(res.body)?.[1] ?? ''
+    expect(accept).toContain('wordprocessingml')
+  })
+
+  it('tells the user in words what the tool takes', async () => {
+    const { cookie } = await signIn(h, 'accept-words@example.test')
+    const res = await h.app.inject({ method: 'GET', url: '/tools/merge-pdf', headers: { cookie } })
+    expect(res.body).toMatch(/PDF documents/i)
+  })
+
+  it('explains a wrong file type in terms of what was expected', async () => {
+    const { cookie } = await signIn(h, 'wrongtype@example.test')
+    const page = await h.app.inject({ method: 'GET', url: '/tools/merge-pdf', headers: { cookie } })
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/tools/merge-pdf',
+      headers: uploadHeaders(cookieJar(cookie, page)),
+      payload: multipart({ _csrf: csrfFrom(page.body) }, [
+        { name: 'files', filename: 'photo.png', data: await samplePng(60, 60) },
+      ]),
+    })
+    // Sent back with a message that says what it wanted, not just what failed.
+    expect(res.statusCode).toBe(302)
+    const reason = decodeURIComponent(String(res.headers.location))
+    expect(reason).toMatch(/PDF documents/i)
+  })
+})
+
+describe('the PDF workspace', () => {
+  /** The workspace itself only renders for someone who may use the tool. */
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `pages-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  it('offers page thumbnails on a PDF tool', async () => {
+    const res = await workspace('split-pdf')
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('data-pdf-pages')
+    expect(res.body).toContain('/static/pdfpages.js')
+  })
+
+  it('does not offer them on an image tool, where there are no pages', async () => {
+    const res = await workspace('resize')
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).not.toContain('data-pdf-pages')
+    expect(res.body).not.toContain('/static/pdfpages.js')
+  })
+
+  it('tells the page grid where the self-hosted pdf.js lives', async () => {
+    // No CDN exists on the target network, so the path has to come from here.
+    const res = await workspace('split-pdf')
+    expect(res.body).toMatch(/data-pdfjs="\/static\/vendor\/pdfjs\//)
+  })
+
+  it('asks for files, not images, when the tool takes documents', async () => {
+    expect((await workspace('split-pdf')).body).toContain('Choose files')
+    expect((await workspace('resize')).body).toContain('Choose images')
+  })
+})
