@@ -733,3 +733,40 @@ describe('what a placed mark defaults to', () => {
     expect(checkedScope((await workspace('pdf-crop')).body)).toBe('all')
   })
 })
+
+describe('the organise workspace', () => {
+  const workspace = async () => {
+    const { cookie } = await signIn(h, 'organise@example.test')
+    return h.app.inject({ method: 'GET', url: '/tools/organize-pdf', headers: { cookie } })
+  }
+
+  it('lays every page out together, with the files listed beside them', async () => {
+    const res = await workspace()
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('data-organize')
+    expect(res.body).toContain('data-organize-grid')
+    expect(res.body).toContain('data-organize-files')
+    expect(res.body).toContain('/static/pdforganize.js')
+  })
+
+  it('offers the three orders worth having', async () => {
+    // By name, by number, and interleaved — the last being how two stacks of
+    // one-sided scans become one document.
+    const res = await workspace()
+
+    expect(res.body).toContain('data-organize-sort="name"')
+    expect(res.body).toContain('data-organize-sort="number"')
+    expect(res.body).toContain('data-organize-sort="interleave"')
+  })
+
+  it('carries the arrangement the workspace writes', async () => {
+    const res = await workspace()
+    expect(res.body).toMatch(/<input type="hidden"[^>]*name="plan"/)
+  })
+
+  it('keeps the page list, so it still works with no script', async () => {
+    const res = await workspace()
+    expect(res.body).toMatch(/name="pages"/)
+  })
+})

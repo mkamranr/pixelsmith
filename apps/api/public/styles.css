@@ -1807,3 +1807,125 @@ input.is-driven { display: none; }
   /* The lattice covers the page, so there is nothing here to drag. */
   pointer-events: none;
 }
+
+/* ---- Arranging pages across documents ---------------------------------- */
+.organize-stage { display: flex; flex-direction: column; gap: 14px; }
+.organize-board { width: 100%; }
+.organize-hint { margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-muted); }
+
+.organize-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 12px;
+}
+
+/* Tinted by which document the page came from, which is the only way to keep
+   track of it once the pages are interleaved. */
+.organize-page {
+  position: relative;
+  padding: 6px;
+  background: var(--surface);
+  border: 2px solid var(--tint, var(--border));
+  border-radius: var(--radius);
+  cursor: grab;
+}
+
+.organize-page.is-dragging { opacity: 0.4; }
+.organize-page.is-target { box-shadow: 0 0 0 3px var(--accent-soft); border-color: var(--accent); }
+
+.organize-plate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 132px;
+  overflow: hidden;
+}
+
+.organize-canvas {
+  max-width: 100%;
+  max-height: 132px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(16, 18, 26, 0.2);
+  /* Turning a thumbnail must not resize its cell. */
+  transition: transform 120ms ease;
+}
+
+.organize-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.organize-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.organize-page:hover .organize-actions,
+.organize-page:focus-within .organize-actions { opacity: 1; }
+
+.organize-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.organize-action:hover { border-color: var(--border-strong); }
+
+.organize-files { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.organize-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  /* A wash of the document's tint, so the panel and the grid agree. */
+  background: color-mix(in srgb, var(--tint) 12%, var(--surface));
+  border-left: 3px solid var(--tint);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  font-size: 0.8125rem;
+}
+
+.organize-file.is-dragging { opacity: 0.4; }
+
+.organize-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organize-file-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border: 0;
+  border-radius: var(--radius-pill);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.organize-file-remove:hover { background: var(--surface); color: var(--text); }
+.organize-sorts { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }

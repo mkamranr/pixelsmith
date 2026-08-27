@@ -1,0 +1,105 @@
+{% extends "layout.njk" %}
+{% import "_macros.njk" as m %}
+{% import "_icons.njk" as ic %}
+{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block mainClass %}wrap-wide{% endblock %}
+{% block content %}
+
+<nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+{% if not canUse %}
+  <h1 class="page-title">{{ tool.title }}</h1>
+  <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before editing documents.</div>
+{% else %}
+
+<h1 class="page-title">{{ tool.title }}</h1>
+{% if tool.ui.blurb %}<p class="lede">{{ tool.ui.blurb }}</p>{% endif %}
+
+{#
+  Every page of every document, laid out together. Which envelope a sheet
+  arrived in stops mattering once the stack is on the desk — so the pages are
+  one grid, tinted by where they came from, and dragging them is the whole
+  interface. The page list in the panel still works on its own.
+#}
+<form class="workspace pdf-organize" method="post" action="/tools/{{ tool.id }}"
+      enctype="multipart/form-data"
+      data-organize
+      data-pdfjs="/static/vendor/pdfjs/pdf.min.mjs"
+      data-pdfjs-worker="/static/vendor/pdfjs/pdf.worker.min.mjs"
+      data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+      data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+  <section class="stage organize-stage" data-stage>
+    {{ m.carried(sourceJob, sourceFiles) }}
+
+    <button type="button" class="canvas-add" data-add-more hidden aria-label="Add more documents">
+      <span class="canvas-add-count" data-file-count>0</span>
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    </button>
+
+    <div class="dropzone" data-dropzone>
+      <input type="file" id="files" name="files" multiple accept="{{ tool.acceptAttribute }}" data-file-input
+             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
+      <label for="files" class="dropzone-label">
+        <span class="dropzone-icon" aria-hidden="true">{{ ic.icon(tool.ui.icon, 38) }}</span>
+        <strong>Choose files</strong>
+        <span class="muted">or drag and drop them here</span>
+        <span class="dropzone-meta">Takes {{ tool.acceptsDescription }} · up to {{ maxFiles }} files · {{ maxUploadMb }} MB each</span>
+      </label>
+    </div>
+
+    <div class="organize-board" data-organize-board hidden>
+      <p class="organize-hint" data-organize-hint></p>
+      <ol class="organize-grid" data-organize-grid></ol>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title"><span class="panel-icon">{{ ic.icon(tool.ui.icon, 18) }}</span>Files</h2>
+      <button type="button" class="btn btn-quiet btn-sm" data-organize-reset>Reset all</button>
+    </div>
+
+    <ol class="organize-files" data-organize-files></ol>
+
+    <div class="organize-sorts">
+      <button type="button" class="btn btn-sm" data-organize-sort="name">
+        A–Z
+      </button>
+      <button type="button" class="btn btn-sm" data-organize-sort="number">
+        1–9
+      </button>
+      <button type="button" class="btn btn-sm" data-organize-sort="interleave"
+              title="Take one page from each document in turn — how two stacks of one-sided scans become one document">
+        Interleave
+      </button>
+    </div>
+
+    {% for f in tool.ui.fields %}{% if f.kind == 'hidden' %}{{ m.field(f) }}{% endif %}{% endfor %}
+
+    <details class="pdf-fine">
+      <summary>Type the order instead</summary>
+      <div class="panel-fields">
+        {% for f in tool.ui.fields %}{% if f.kind != 'hidden' %}{{ m.field(f) }}{% endif %}{% endfor %}
+      </div>
+    </details>
+
+    <div class="panel-footer">
+      <button class="btn btn-primary btn-block btn-lg" type="submit">
+        {{ tool.title }}
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="hint" data-summary></p>
+    </div>
+  </aside>
+</form>
+
+<script src="/static/pdforganize.js" defer></script>
+{% endif %}
+{% endblock %}

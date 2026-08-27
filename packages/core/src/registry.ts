@@ -38,7 +38,7 @@ export interface ToolUi {
    * `form` (default) renders the declarative field list. `editor` marks a tool
    * that needs its own interactive page.
    */
-  surface?: 'form' | 'canvas' | 'editor' | 'crop' | 'htmlshot' | 'pdfedit'
+  surface?: 'form' | 'canvas' | 'editor' | 'crop' | 'htmlshot' | 'pdfedit' | 'pdforganize'
   /**
    * How a document is edited on the page itself, rather than by typing numbers
    * into fields. Named after the interaction rather than the tool, because
