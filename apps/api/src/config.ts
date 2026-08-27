@@ -52,6 +52,14 @@ const ConfigSchema = z.object({
   CHROMIUM_PATH: z.string().optional(),
 
   /**
+   * Paths to the bundled document tools. Absent means the features that need
+   * them report themselves unavailable, rather than failing obscurely.
+   */
+  QPDF_PATH: z.string().optional(),
+  SOFFICE_PATH: z.string().optional(),
+  TESSERACT_PATH: z.string().optional(),
+
+  /**
    * Base URL of the inference sidecar. Unset means the machine-learning tools
    * report themselves unavailable instead of failing obscurely.
    */

@@ -93,3 +93,22 @@ export class EncryptedPdfError extends PixelsmithError {
     )
   }
 }
+
+export class ExternalToolUnavailableError extends PixelsmithError {
+  constructor(
+    readonly tool: string,
+    detail: string,
+  ) {
+    // 503, not 500: the request was fine, the capability is not installed.
+    super('tool_unavailable', 503, `${tool} is not available on this server: ${detail}`)
+  }
+}
+
+export class ExternalToolFailedError extends PixelsmithError {
+  constructor(
+    readonly tool: string,
+    detail: string,
+  ) {
+    super('tool_failed', 502, `${tool} could not process this file: ${detail}`)
+  }
+}

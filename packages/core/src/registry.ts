@@ -75,6 +75,12 @@ export interface RuntimeSettings {
    * are unavailable and say so, rather than failing obscurely.
    */
   inferenceUrl?: string
+  /** Path to qpdf, for the document tools that need it. */
+  qpdfPath?: string
+  /** Path to the LibreOffice launcher, for Office conversions. */
+  sofficePath?: string
+  /** Path to tesseract, for optical character recognition. */
+  tesseractPath?: string
 }
 
 export const DEFAULT_SETTINGS: RuntimeSettings = { allowedRenderHosts: [] }

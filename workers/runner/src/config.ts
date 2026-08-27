@@ -18,6 +18,9 @@ const Schema = z.object({
   JOB_TIMEOUT_MINUTES: z.coerce.number().positive().default(15),
   INFERENCE_URL: z.string().optional(),
   CHROMIUM_PATH: z.string().optional(),
+  QPDF_PATH: z.string().optional(),
+  SOFFICE_PATH: z.string().optional(),
+  TESSERACT_PATH: z.string().optional(),
   ALLOWED_RENDER_HOSTS: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 })

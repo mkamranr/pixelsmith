@@ -31,6 +31,9 @@ async function main() {
       allowedRenderHosts: config.allowedRenderHosts,
       ...(config.CHROMIUM_PATH ? { chromiumExecutablePath: config.CHROMIUM_PATH } : {}),
       ...(config.INFERENCE_URL ? { inferenceUrl: config.INFERENCE_URL } : {}),
+      ...(config.QPDF_PATH ? { qpdfPath: config.QPDF_PATH } : {}),
+      ...(config.SOFFICE_PATH ? { sofficePath: config.SOFFICE_PATH } : {}),
+      ...(config.TESSERACT_PATH ? { tesseractPath: config.TESSERACT_PATH } : {}),
     },
     logger,
   })

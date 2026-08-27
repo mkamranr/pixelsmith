@@ -8,6 +8,7 @@ import { htmlShot } from './htmlshot.js'
 import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
 import { rotatePdf } from './pdf-rotate.js'
+import { pdfCompress } from './pdf-compress.js'
 import { pdfCrop } from './pdf-crop.js'
 import { htmlToPdf } from './pdf-from-html.js'
 import { imagesToPdf } from './pdf-from-images.js'
@@ -51,12 +52,14 @@ export const ALL_TOOLS = [
   pdfWatermark,
   pdfCrop,
   htmlToPdf,
+  pdfCompress,
 ]
 
 export const registry = createRegistry(ALL_TOOLS)
 
 export {
   htmlToPdf,
+  pdfCompress,
   imagesToPdf,
   mergePdf,
   pdfCrop,

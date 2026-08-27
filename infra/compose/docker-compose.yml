@@ -72,6 +72,9 @@ services:
       JOB_TIMEOUT_MINUTES: ${JOB_TIMEOUT_MINUTES:-15}
       INFERENCE_URL: http://inference:8188
       CHROMIUM_PATH: /usr/bin/chromium
+      QPDF_PATH: /usr/bin/qpdf
+      SOFFICE_PATH: /usr/bin/soffice
+      TESSERACT_PATH: /usr/bin/tesseract
       ALLOWED_RENDER_HOSTS: ${ALLOWED_RENDER_HOSTS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:

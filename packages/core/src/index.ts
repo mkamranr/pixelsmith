@@ -1,5 +1,6 @@
 export * from './browser.js'
 export * from './errors.js'
+export * from './external.js'
 export * from './inference.js'
 export * from './naming.js'
 export * from './pages.js'
