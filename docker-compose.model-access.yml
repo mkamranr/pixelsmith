@@ -1,0 +1,19 @@
+# Lets the workers reach a language model that is not in this stack.
+#
+# Use it only if you need one. The default posture is that nothing behind the
+# API has a route off this host, and that is a property worth keeping: it is
+# why the air-gap test passes. This file gives the workers that route, so
+# applying it is a deliberate decision and looks like one on the command line:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.model-access.yml up -d
+#
+# The workers can then reach whatever this host can reach — your LAN, and the
+# internet if this host has it. If that is more than you want, the better
+# answer is to run the model inside this stack on the `internal` network, where
+# no route out is needed at all. See docs/RUNBOOK.md.
+#
+# `inference` is deliberately left alone. It runs our own vendored weights and
+# has never needed to reach anything.
+services:
+  runner:
+    networks: [internal, edge]

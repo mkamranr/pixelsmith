@@ -285,6 +285,24 @@ export interface ChatOptions {
  * needs exactly this, and a thin seam is easy to point at vLLM, Ollama,
  * llama.cpp or anything else that speaks the same shape.
  */
+/**
+ * A reasoning model narrates its working in <think> blocks and puts the answer
+ * after them, both in the same `content` field. The narration is the model
+ * talking to itself — never the answer, and not something to show a reader, who
+ * asked for a summary and not for deliberation about how to write one.
+ *
+ * An unclosed block means the response hit its token limit while still
+ * thinking, so there is no answer in it at all. Cutting from the opening tag to
+ * the end leaves nothing, and the caller reports that rather than passing along
+ * half a thought.
+ */
+export function stripReasoning(content: string): string {
+  return content
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/gi, '')
+    .replace(/<think\b[^>]*>[\s\S]*$/i, '')
+    .trim()
+}
+
 export async function chatWithLlm(
   settings: LlmSettings | null,
   messages: LlmMessage[],
@@ -323,9 +341,14 @@ export async function chatWithLlm(
     throw new LlmFailedError(`it answered ${response.status}${said ? `: ${said}` : ''}`)
   }
 
-  const content = body?.choices?.[0]?.message?.content
-  if (typeof content !== 'string' || content.trim() === '') {
+  const raw = body?.choices?.[0]?.message?.content
+  if (typeof raw !== 'string' || raw.trim() === '') {
     throw new LlmFailedError('it returned no text')
+  }
+
+  const content = stripReasoning(raw)
+  if (content === '') {
+    throw new LlmFailedError('it returned its reasoning but no answer')
   }
 
   return content

@@ -171,6 +171,73 @@ describe('asking a model for something', () => {
  * reaching a model says nothing about the other, and it is the workers that do
  * the work.
  */
+describe('a model that thinks out loud', () => {
+  /**
+   * Reasoning models — Qwen's and DeepSeek's among them — narrate their working
+   * inside <think> tags and put the answer after it. Both come back in the same
+   * `content` field, so writing that field into a document puts the model's
+   * private deliberation in front of the reader. Found the first time this ran
+   * against a real Qwen: a summary PDF whose first two thirds were the model
+   * talking to itself about how to write the summary.
+   */
+  const answerFor = (content: string) =>
+    chatWithLlm(settings, [{ role: 'user', content: 'x' }], {
+      fetchImpl: stubFetch({ body: { choices: [{ message: { content } }] } }).impl,
+    })
+
+  it('keeps the answer and drops the thinking', async () => {
+    const said = await answerFor(
+      '<think>The user wants one paragraph. I should not add anything extra.</think>\nThe upgrade finished in June.',
+    )
+
+    expect(said).toBe('The upgrade finished in June.')
+  })
+
+  it('drops thinking that runs over many lines, and more than one block', async () => {
+    const said = await answerFor(
+      '<think>\nfirst\nsecond\n</think>Part one.<think>more thought</think> Part two.',
+    )
+
+    expect(said).toBe('Part one. Part two.')
+  })
+
+  it('leaves an ordinary answer exactly as it came', async () => {
+    const said = await answerFor('The contract expires in September. 4 < 5 and a > b.')
+
+    expect(said).toBe('The contract expires in September. 4 < 5 and a > b.')
+  })
+
+  it('says it got no answer when the model only thought', async () => {
+    // Better a clear failure than a document containing deliberation alone.
+    await expect(answerFor('<think>Let me consider this at length.</think>   ')).rejects.toThrow(
+      /reasoning but no answer/,
+    )
+  })
+
+  it('says it got no answer when the thinking was cut off mid-sentence', async () => {
+    // Ran out of tokens before closing the tag, so there is no answer at all.
+    await expect(answerFor('<think>I will start by looking at the first')).rejects.toThrow(
+      /reasoning but no answer/,
+    )
+  })
+
+  it('ignores a reasoning field kept separate from the answer', async () => {
+    // vLLM can be configured to split them out. Nothing to strip, but the
+    // answer must not pick the wrong field up.
+    const fetcher = stubFetch({
+      body: {
+        choices: [{ message: { reasoning_content: 'thinking about it', content: 'The answer.' } }],
+      },
+    })
+
+    const said = await chatWithLlm(settings, [{ role: 'user', content: 'x' }], {
+      fetchImpl: fetcher.impl,
+    })
+
+    expect(said).toBe('The answer.')
+  })
+})
+
 describe('deciding whether a job would actually reach a model', () => {
   const verified = { ...settings, verifiedAt: Date.now() }
   const confirmed = {
