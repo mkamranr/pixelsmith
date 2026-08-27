@@ -6,10 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Pixelsmith{% endblock %}</title>
 <meta name="description" content="Pixelsmith — a self-hosted image and PDF workshop. Your files never leave the building.">
-<link rel="stylesheet" href="/static/styles.css">
-<link rel="icon" href="/static/brand/favicon-32.png" sizes="32x32" type="image/png">
-<link rel="icon" href="/static/brand/favicon-16.png" sizes="16x16" type="image/png">
-<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">
+<link rel="stylesheet" href="{{ asset('/static/styles.css') }}">
+<link rel="icon" href="{{ asset('/static/brand/favicon-32.png') }}" sizes="32x32" type="image/png">
+<link rel="icon" href="{{ asset('/static/brand/favicon-16.png') }}" sizes="16x16" type="image/png">
+<link rel="apple-touch-icon" href="{{ asset('/static/brand/apple-touch-icon.png') }}">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -22,7 +22,7 @@
         colour, scales with the type and reads properly aloud. alt is empty
         because the word beside it already says what this is.
       #}
-      <img class="brand-mark" src="/static/brand/mark.png" alt="" width="34" height="28" decoding="async">
+      <img class="brand-mark" src="{{ asset('/static/brand/mark.png') }}" alt="" width="34" height="28" decoding="async">
       <span class="brand-name">Pixelsmith</span>
     </a>
 
@@ -95,7 +95,7 @@
   </div>
 </footer>
 
-<script src="/static/app.js" defer></script>
+<script src="{{ asset('/static/app.js') }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

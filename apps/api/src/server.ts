@@ -10,6 +10,7 @@ import fastifyView from '@fastify/view'
 import Fastify, { type FastifyInstance } from 'fastify'
 import nunjucks from 'nunjucks'
 import { isPixelsmithError } from '@pixelsmith/contracts'
+import { assetStamp } from './assets.js'
 import type { AppContext } from './context.js'
 import { authPlugin } from './plugins/auth.js'
 import { registerAdmin } from './routes/admin.js'
@@ -74,6 +75,9 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
     },
   })
 
+  // Computed once at boot: the files cannot change under a running server.
+  const stamp = await assetStamp(PUBLIC)
+
   await app.register(fastifyView, {
     engine: { nunjucks },
     root: VIEWS,
@@ -84,14 +88,25 @@ export async function buildServer(ctx: AppContext): Promise<FastifyInstance> {
       autoescape: true,
       noCache: !ctx.config.isProduction,
     },
+    defaultContext: {
+      /**
+       * `{{ asset('/static/styles.css') }}` in every template that points at a
+       * static file. Available everywhere rather than passed per route, so a new
+       * page cannot forget it and quietly go back to serving stale files.
+       */
+      asset: (path: string) => `${path}?v=${stamp}`,
+    },
   })
 
   await app.register(fastifyStatic, {
     root: PUBLIC,
     prefix: '/static/',
-    // Long cache, and filenames stay stable; safe because the whole app ships
-    // as one versioned image.
+    // Safe to cache hard because every address carries `?v=` with a hash of
+    // what is being served, so a new build is a new address. Without that the
+    // long cache was actively harmful: pages came back new and referred to a
+    // stylesheet the browser had been told to keep for a week.
     maxAge: ctx.config.isProduction ? '7d' : 0,
+    immutable: ctx.config.isProduction,
   })
 
   await app.register(authPlugin, { ctx })
