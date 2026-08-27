@@ -42,12 +42,13 @@ export const pdfCrop: Tool<PdfCropParams> = {
   ui: {
     group: 'pdf-edit',
     icon: 'crop',
-    surface: 'canvas',
+    surface: 'pdfedit',
+    pdfEdit: 'crop',
     preview: 'none',
-    blurb: 'Trim the margins of every page, given as a proportion of the page.',
+    blurb: 'Drag on the page to choose the area to keep. Apply it to every page or just the one on screen.',
     fields: [
       { name: 'x', label: 'Left edge', kind: 'number', min: 0, max: 1, step: 0.01, default: 0,
-        help: 'As a fraction of the page width: 0 is the left edge.' },
+        help: 'Set by dragging on the page. As a fraction of the width: 0 is the left edge.' },
       { name: 'y', label: 'Top edge', kind: 'number', min: 0, max: 1, step: 0.01, default: 0 },
       { name: 'width', label: 'Width', kind: 'number', min: 0.01, max: 1, step: 0.01, default: 1 },
       { name: 'height', label: 'Height', kind: 'number', min: 0.01, max: 1, step: 0.01, default: 1 },

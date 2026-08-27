@@ -38,7 +38,14 @@ export interface ToolUi {
    * `form` (default) renders the declarative field list. `editor` marks a tool
    * that needs its own interactive page.
    */
-  surface?: 'form' | 'canvas' | 'editor' | 'crop' | 'htmlshot'
+  surface?: 'form' | 'canvas' | 'editor' | 'crop' | 'htmlshot' | 'pdfedit'
+  /**
+   * How a document is edited on the page itself, rather than by typing numbers
+   * into fields. Named after the interaction rather than the tool, because
+   * several tools want the same one: `crop` is a single rectangle, `boxes` is
+   * any number of them, `place` is a mark dropped where it should sit.
+   */
+  pdfEdit?: 'crop' | 'boxes' | 'place'
   /**
    * Which PDF workspace suits the tool: a grid of one document's pages, or a
    * card per document. Merging is about the order of files, so a grid of the

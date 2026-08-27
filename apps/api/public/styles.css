@@ -1531,3 +1531,159 @@ input.is-driven { display: none; }
    be a broken image pointing at a PDF. */
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
+
+/* ---- Editing a PDF on the page ----------------------------------------- */
+/* Three columns: the page rail, the page, the settings. The rail collapses to
+   nothing when the document has a single page. */
+.pdf-edit {
+  grid-template-columns: auto minmax(0, 1fr) clamp(320px, 24vw, 380px);
+}
+
+@media (max-width: 900px) {
+  .pdf-edit { grid-template-columns: minmax(0, 1fr); }
+}
+
+.pdf-rail {
+  max-height: 72vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.pdf-rail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.pdf-rail-page {
+  display: block;
+  width: 100%;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.pdf-rail-page canvas { display: block; width: 100%; height: auto; background: #ffffff; }
+.pdf-rail-page:hover { border-color: var(--border); }
+.pdf-rail-page.is-current { border-color: var(--accent); color: var(--text); }
+
+.pdf-edit-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.pdf-viewer { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+
+/* The page. Overflow hidden so the dimming outline around the kept area is
+   clipped to the page rather than flooding the workspace. */
+.pdf-page-holder {
+  position: relative;
+  overflow: hidden;
+  line-height: 0;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(16, 18, 26, 0.18);
+}
+
+.pdf-page-canvas-main { display: block; }
+
+.pdf-overlay {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  /* Above the page, and the place every pointer gesture lands. */
+  touch-action: none;
+}
+
+.pdf-selection {
+  position: absolute;
+  border: 1px solid var(--accent-ink);
+  box-shadow: 0 0 0 1px var(--accent);
+  cursor: move;
+  /* Dims everything outside the selection in one declaration. */
+  outline: 9999px solid rgba(16, 18, 26, 0.45);
+}
+
+.pdf-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--accent-ink);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+}
+
+.pdf-handle-nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.pdf-handle-n { top: -6px; left: 50%; margin-left: -6px; cursor: ns-resize; }
+.pdf-handle-ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.pdf-handle-e { top: 50%; right: -6px; margin-top: -6px; cursor: ew-resize; }
+.pdf-handle-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.pdf-handle-s { bottom: -6px; left: 50%; margin-left: -6px; cursor: ns-resize; }
+.pdf-handle-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.pdf-handle-w { top: 50%; left: -6px; margin-top: -6px; cursor: ew-resize; }
+
+.pdf-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow);
+}
+
+.pdf-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.pdf-bar-btn:hover { background: var(--surface-2); border-color: var(--border); }
+.pdf-bar-label { font-size: 0.8125rem; color: var(--text-muted); min-width: 3.5rem; text-align: center; }
+.pdf-bar-divider { width: 1px; height: 20px; background: var(--border); }
+.pdf-bar-name {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-edit-hint { margin: 0 0 12px; font-size: 0.8125rem; color: var(--text-muted); }
+.pdf-edit-hint.is-error { color: var(--accent); }
+.pdf-edit-actions { margin-bottom: 12px; }
+
+.pdf-scope { margin: 0 0 14px; padding: 0; border: 0; }
+.pdf-scope legend { padding: 0; font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px; }
+
+/* The numbers are still there, just no longer the way in. */
+.pdf-fine { margin-bottom: 14px; }
+.pdf-fine summary { font-size: 0.8125rem; color: var(--text-muted); cursor: pointer; }
+.pdf-fine[open] summary { margin-bottom: 10px; }
+
+/* A tall page scrolls inside the workspace, and the page and zoom controls stay
+   pinned to the bottom of it rather than being pushed off the screen. */
+.pdf-viewer {
+  max-height: calc(100vh - 210px);
+  overflow: auto;
+}
+
+.pdf-viewer-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}

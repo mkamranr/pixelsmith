@@ -1,0 +1,137 @@
+{% extends "layout.njk" %}
+{% import "_macros.njk" as m %}
+{% import "_icons.njk" as ic %}
+{% block title %}{{ tool.title }} — Pixelsmith{% endblock %}
+{% block mainClass %}wrap-wide{% endblock %}
+{% block content %}
+
+<nav class="crumbs"><a href="/">Tools</a> <span aria-hidden="true">/</span> {{ tool.title }}</nav>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+{% if not canUse %}
+  <h1 class="page-title">{{ tool.title }}</h1>
+  <div class="alert">You need to <a href="/login?next=/tools/{{ tool.id }}">sign in</a> before editing documents.</div>
+{% else %}
+
+<h1 class="page-title">{{ tool.title }}</h1>
+{% if tool.ui.blurb %}<p class="lede">{{ tool.ui.blurb }}</p>{% endif %}
+
+{#
+  A document workspace: the page itself, at a readable size, with the edit made
+  on it directly. The fields in the panel still hold the same values and still
+  work on their own — this is the same form, shown a better way.
+#}
+<form class="workspace pdf-edit" method="post" action="/tools/{{ tool.id }}"
+      enctype="multipart/form-data"
+      data-pdf-edit data-pdf-edit-mode="{{ tool.ui.pdfEdit or 'crop' }}"
+      data-pdfjs="/static/vendor/pdfjs/pdf.min.mjs"
+      data-pdfjs-worker="/static/vendor/pdfjs/pdf.worker.min.mjs"
+      data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+      data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+  {# The page rail: somewhere to see the whole document and jump about it. #}
+  <aside class="pdf-rail" data-pdf-rail hidden aria-label="Pages">
+    <ol class="pdf-rail-list" data-pdf-rail-list></ol>
+  </aside>
+
+  <section class="stage pdf-edit-stage" data-stage>
+    {{ m.carried(sourceJob, sourceFiles) }}
+
+    <div class="dropzone" data-dropzone>
+      <input type="file" id="files" name="files" multiple accept="{{ tool.acceptAttribute }}" data-file-input
+             {% if not sourceFiles or not sourceFiles | length %}required{% endif %}>
+      <label for="files" class="dropzone-label">
+        <span class="dropzone-icon" aria-hidden="true">{{ ic.icon(tool.ui.icon, 38) }}</span>
+        <strong>Choose files</strong>
+        <span class="muted">or drag and drop them here</span>
+        <span class="dropzone-meta">Takes {{ tool.acceptsDescription }} · up to {{ maxFiles }} files · {{ maxUploadMb }} MB each</span>
+      </label>
+    </div>
+
+    <div class="pdf-viewer" data-pdf-viewer hidden>
+      <div class="pdf-page-holder" data-pdf-holder>
+        <canvas class="pdf-page-canvas-main" data-pdf-canvas></canvas>
+        {# The edit is drawn here, over the page, by script. #}
+        <div class="pdf-overlay" data-pdf-overlay></div>
+      </div>
+
+      <div class="pdf-viewer-bar">
+        <button type="button" class="pdf-bar-btn" data-pdf-prev aria-label="Previous page">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+        </button>
+        <span class="pdf-bar-label" data-pdf-page-label>1 / 1</span>
+        <button type="button" class="pdf-bar-btn" data-pdf-next aria-label="Next page">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <span class="pdf-bar-divider" aria-hidden="true"></span>
+        <button type="button" class="pdf-bar-btn" data-pdf-zoom-out aria-label="Zoom out">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round"><path d="M5 12h14"/></svg>
+        </button>
+        <span class="pdf-bar-label" data-pdf-zoom-label>100%</span>
+        <button type="button" class="pdf-bar-btn" data-pdf-zoom-in aria-label="Zoom in">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        </button>
+        <button type="button" class="pdf-bar-btn" data-pdf-fit aria-label="Fit the page">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V3h5"/><path d="M21 16v5h-5"/>
+               <path d="M3 3l7 7"/><path d="M21 21l-7-7"/></svg>
+        </button>
+        <span class="pdf-bar-name" data-pdf-name></span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h2 class="panel-title"><span class="panel-icon">{{ ic.icon(tool.ui.icon, 18) }}</span>Settings</h2>
+    </div>
+
+    <p class="pdf-edit-hint" data-pdf-hint>
+      {% if tool.ui.pdfEdit == 'boxes' %}Drag on the page to cover anything that must not leave.
+      {% elif tool.ui.pdfEdit == 'place' %}Drag the mark to where it should sit.
+      {% else %}Click and drag on the page to choose the area to keep.{% endif %}
+    </p>
+
+    <div class="pdf-edit-actions">
+      <button type="button" class="btn btn-quiet btn-sm" data-pdf-reset>Reset all</button>
+    </div>
+
+    <fieldset class="pdf-scope" data-pdf-scope>
+      <legend>Pages</legend>
+      {# Not a tool parameter: the script turns this into the pages field below. #}
+      <label class="check-row"><input type="radio" name="pdfScope" value="all" checked> All pages</label>
+      <label class="check-row"><input type="radio" name="pdfScope" value="current"> Current page</label>
+    </fieldset>
+
+    {% if tool.ui.fields | length %}
+      {# Kept, and kept working: the numbers are what gets posted, and they can
+         still be typed if someone would rather. #}
+      <details class="pdf-fine" data-pdf-fine>
+        <summary>Exact numbers</summary>
+        <div class="panel-fields">
+          {% for f in tool.ui.fields %}{{ m.field(f) }}{% endfor %}
+        </div>
+      </details>
+    {% endif %}
+
+    <div class="panel-footer">
+      <button class="btn btn-primary btn-block btn-lg" type="submit">
+        {{ tool.title }}
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="hint" data-summary></p>
+    </div>
+  </aside>
+</form>
+
+<script src="/static/pdfedit.js" defer></script>
+{% endif %}
+{% endblock %}

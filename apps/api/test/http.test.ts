@@ -598,3 +598,46 @@ describe('the merge workspace', () => {
     expect(res.body).toMatch(/name="ranges"/)
   })
 })
+
+describe('editing a PDF on the page rather than in the fields', () => {
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `edit-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  it('gives crop a page to drag a rectangle on', async () => {
+    const res = await workspace('pdf-crop')
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('data-pdf-edit')
+    expect(res.body).toMatch(/data-pdf-edit-mode="crop"/)
+    expect(res.body).toContain('/static/pdfedit.js')
+  })
+
+  it('offers the page rail, zoom and a reset, as a document editor should', async () => {
+    const res = await workspace('pdf-crop')
+
+    expect(res.body).toContain('data-pdf-rail')
+    expect(res.body).toContain('data-pdf-zoom-in')
+    expect(res.body).toContain('data-pdf-zoom-out')
+    expect(res.body).toContain('data-pdf-reset')
+  })
+
+  it('lets the area apply to every page or only the one on screen', async () => {
+    const res = await workspace('pdf-crop')
+    expect(res.body).toMatch(/data-pdf-scope/)
+  })
+
+  it('keeps the numbers, so the tool still works with no script at all', async () => {
+    const res = await workspace('pdf-crop')
+
+    for (const field of ['x', 'y', 'width', 'height', 'pages']) {
+      expect(res.body, `${field} field missing`).toMatch(new RegExp(`name="${field}"`))
+    }
+  })
+
+  it('does not put a document editor on an image tool', async () => {
+    const res = await workspace('resize')
+    expect(res.body).not.toContain('data-pdf-edit')
+  })
+})

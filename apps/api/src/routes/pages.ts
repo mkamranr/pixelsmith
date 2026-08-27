@@ -57,6 +57,7 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
       crop: 'crop.njk',
       htmlshot: 'htmlshot.njk',
       canvas: 'canvas.njk',
+      pdfedit: 'pdfedit.njk',
     }
     const template = SURFACES[tool.ui.surface ?? 'form'] ?? 'tool.njk'
     return reply.view(
