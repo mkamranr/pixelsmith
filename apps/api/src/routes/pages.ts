@@ -5,6 +5,7 @@ import type { AppContext } from '../context.js'
 import { BadRequestError, NotFoundError } from '../errors.js'
 import { intakeJob } from '../intake.js'
 import { pageData } from '../render.js'
+import { jobFor } from '../job-access.js'
 
 /** Where a failed form send the user back to, with a readable reason. */
 const back = (path: string, message: string) => `${path}?error=${encodeURIComponent(message)}`
@@ -95,7 +96,7 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
 
   app.get('/jobs/:id', { preHandler: app.requireUser }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const job = await ctx.jobs.getJobForUser(id, req.currentUser!.id)
+    const job = await jobFor(ctx, req, id)
     if (!job) throw new NotFoundError('Job')
 
     const files = await ctx.jobs.listFiles(job.id)

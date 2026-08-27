@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { and, desc, eq, lte, ne } from 'drizzle-orm'
 import type { Db } from '../client.js'
 import { jobFiles, jobs, type Job, type JobFile } from '../schema.js'
@@ -47,6 +47,9 @@ export function jobsRepo(db: Db, options: JobsRepoOptions = {}) {
           userId: input.userId,
           toolId: input.toolId,
           params: input.params as object,
+          // 32 bytes: this is the only thing standing between a job and someone
+          // who has neither the cookie nor an account.
+          readToken: randomBytes(32).toString('base64url'),
           status: 'queued',
           progress: 0,
           // Set at creation as well as at completion: a job that is queued and

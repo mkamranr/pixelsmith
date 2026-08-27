@@ -13,6 +13,7 @@ declare module 'fastify' {
   }
   interface FastifyInstance {
     requireUser: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
+    requireViewer: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
     requireAdmin: (req: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
 }
@@ -92,6 +93,17 @@ export const authPlugin = fp<AuthPluginOptions>(
 
     app.decorate('requireUser', async (req: FastifyRequest, reply: FastifyReply) => {
       if (open) return ensureVisitor(req, reply)
+      if (!req.currentUser) throw new UnauthorizedError()
+    })
+
+    /**
+     * For requests that only read. With accounts switched off a reader needs no
+     * identity at all — authorisation comes from holding the job id — so no
+     * visitor is created. Minting one per request meant a script polling a job
+     * left a user row behind for every poll.
+     */
+    app.decorate('requireViewer', async (req: FastifyRequest) => {
+      if (open) return
       if (!req.currentUser) throw new UnauthorizedError()
     })
 

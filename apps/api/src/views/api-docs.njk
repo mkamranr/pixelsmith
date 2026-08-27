@@ -11,20 +11,32 @@
 <h2 class="section-title">Getting in</h2>
 <p>
   {% if openAccess %}
-    This deployment is open, so no credentials are needed. Identity still
-    matters — a job belongs to whoever created it — so <strong>keep
-    cookies</strong> between requests: the first call sets one, and the calls
-    that read the job back need it. In curl, that is <code>-c</code> and
-    <code>-b</code> with a jar file.
+    This deployment is open, so no credentials are needed to create a job.
   {% else %}
     This deployment uses accounts, so sign in first and keep the session cookie.
     An unauthenticated call is answered with <code>401</code> and JSON.
   {% endif %}
 </p>
+<p>
+  Identity still matters after that, because a job belongs to whoever created it
+  and is nobody else's to read. Creating one answers with a
+  <code>token</code>; send it back as <code>X-Job-Token</code> on the calls that
+  read the job, its progress or its files. A browser needs no token, having been
+  given a cookie, but a script has no cookie jar — and without either, reading
+  your own job is answered <code>404</code> like anyone else's.
+</p>
+<p class="hint">
+  The token is the job's only protection, so treat it as one: it goes in a
+  header rather than the URL, because URLs end up in logs and history.
+  <code>GET /api/jobs/{id}/events</code> is the exception — a browser's
+  <code>EventSource</code> cannot set headers, so it relies on the cookie. From
+  a script, poll the status instead.
+</p>
 <p class="hint">
   There is no API-key mechanism yet. The table exists in the database but
-  nothing issues or verifies keys, so cookies are the only way in — worth
-  knowing before you write a client around it.
+  nothing issues or verifies keys — worth knowing before you write a client
+  around it. Per-job tokens are not a substitute: they authorise one job, not a
+  caller.
 </p>
 
 <h2 class="section-title">Endpoints</h2>
@@ -130,19 +142,23 @@
 </table>
 
 <h2 class="section-title">An example, start to finish</h2>
-<pre class="code"><code># Create the job, keeping cookies so the result can be read back.
-JOB=$(curl -sS -c jar -b jar -X POST http://localhost:8080/api/jobs \
+<pre class="code"><code>HOST=http://localhost:8080
+
+# Create the job. Keep the id and the token it answers with.
+CREATED=$(curl -sS -X POST $HOST/api/jobs \
   -F "tool=merge-pdf" \
   -F "files=@first.pdf" -F "files=@second.pdf" \
-  -F "filename=joined" | jq -r .id)
+  -F "filename=joined")
+JOB=$(echo "$CREATED" | jq -r .id)
+TOKEN=$(echo "$CREATED" | jq -r .token)
 
-# Wait for it.
-until curl -sS -c jar -b jar "http://localhost:8080/api/jobs/$JOB" \
+# Wait for it. The token is what makes this readable without a cookie jar.
+until curl -sS -H "X-Job-Token: $TOKEN" "$HOST/api/jobs/$JOB" \
   | jq -e '.status == "done" or .status == "failed"' >/dev/null; do sleep 1; done
 
 # Take the result.
-URL=$(curl -sS -c jar -b jar "http://localhost:8080/api/jobs/$JOB" | jq -r '.outputs[0].url')
-curl -sS -c jar -b jar "http://localhost:8080$URL" -o joined.pdf</code></pre>
+URL=$(curl -sS -H "X-Job-Token: $TOKEN" "$HOST/api/jobs/$JOB" | jq -r '.outputs[0].url')
+curl -sS -H "X-Job-Token: $TOKEN" "$HOST$URL" -o joined.pdf</code></pre>
 
 <h2 class="section-title">Every tool</h2>
 {% for family in families %}

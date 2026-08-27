@@ -8,6 +8,13 @@
       "when": 1787755275624,
       "tag": "0000_early_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787859018100,
+      "tag": "0001_amazing_sersi",
+      "breakpoints": true
     }
   ]
 }

@@ -78,6 +78,12 @@ export const jobs = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     toolId: text('tool_id').notNull(),
     params: text('params', { mode: 'json' }).notNull(),
+    /**
+     * Handed back when the job is created, so a client that keeps no cookies
+     * can still read its own job. Null on rows created before this existed;
+     * those are only readable by their owner's cookie, as they always were.
+     */
+    readToken: text('read_token'),
     status: text('status', { enum: ['queued', 'running', 'done', 'failed', 'expired', 'cancelled'] })
       .notNull()
       .default('queued'),

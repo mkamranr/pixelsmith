@@ -4,6 +4,7 @@ import type { AppContext } from '../context.js'
 import { NotFoundError } from '../errors.js'
 import { intakeJob } from '../intake.js'
 import { zodToFields } from '../schema-doc.js'
+import { jobFor } from '../job-access.js'
 
 /**
  * The JSON API. The HTML pages do not depend on it — they are server-rendered —
@@ -75,7 +76,7 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
    */
   app.post('/api/jobs', { preHandler: app.requireUser }, async (req, reply) => {
     const { jobId, toolId } = await intakeJob({ app, ctx, req, reply, csrf: false })
-    const job = await ctx.jobs.getJobForUser(jobId, req.currentUser!.id)
+    const job = await jobFor(ctx, req, jobId)
 
     return reply.status(202).send({
       id: jobId,
@@ -83,12 +84,16 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
       status: job?.status ?? 'queued',
       statusUrl: `/api/jobs/${jobId}`,
       eventsUrl: `/api/jobs/${jobId}/events`,
+      // Send this back as `X-Job-Token` to read the job without a cookie. A
+      // browser needs neither, having been given one; a script has no cookie
+      // jar and would otherwise be told its own job does not exist.
+      token: job?.readToken ?? null,
     })
   })
 
-  app.get('/api/jobs/:id', { preHandler: app.requireUser }, async (req) => {
+  app.get('/api/jobs/:id', { preHandler: app.requireViewer }, async (req) => {
     const { id } = req.params as { id: string }
-    const job = await ctx.jobs.getJobForUser(id, req.currentUser!.id)
+    const job = await jobFor(ctx, req, id)
     if (!job) throw new NotFoundError('Job')
 
     const files = await ctx.jobs.listFiles(job.id)
@@ -118,9 +123,9 @@ export async function registerApi(app: FastifyInstance, ctx: AppContext) {
    * without JavaScript the page falls back to a meta refresh, so the feature
    * degrades rather than disappearing.
    */
-  app.get('/api/jobs/:id/events', { preHandler: app.requireUser }, async (req, reply) => {
+  app.get('/api/jobs/:id/events', { preHandler: app.requireViewer }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const job = await ctx.jobs.getJobForUser(id, req.currentUser!.id)
+    const job = await jobFor(ctx, req, id)
     if (!job) throw new NotFoundError('Job')
 
     reply.raw.writeHead(200, {

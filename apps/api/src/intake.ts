@@ -8,6 +8,7 @@ import { deriveName, LlmUnavailableError, probeForTool, probeImage } from '@pixe
 import { BadRequestError, NotFoundError, TooManyFilesError } from './errors.js'
 import { coerceFormParams } from './params.js'
 import type { AppContext } from './context.js'
+import { jobFor } from './job-access.js'
 
 /** How many supporting files one job may carry — a mark, a signature. */
 const MAX_ASSETS = 4
@@ -140,7 +141,7 @@ export async function intakeJob(options: IntakeOptions): Promise<{ jobId: string
     // forward. Copy them in rather than making them download and re-upload.
     const fromJob = typeof fields.fromJob === 'string' ? fields.fromJob.trim() : ''
     if (staged.length === 0 && fromJob) {
-      const source = await ctx.jobs.getJobForUser(fromJob, req.currentUser!.id)
+      const source = await jobFor(ctx, req, fromJob)
       if (!source || source.status !== 'done') {
         throw new BadRequestError('Those earlier results are no longer available')
       }

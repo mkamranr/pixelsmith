@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { BOUNDARY, cookieJar, multipart, openApp, samplePng, testApp } from './helpers/app.js'
+import { BOUNDARY, cookieJar, multipart, openApp, samplePng, signIn, testApp } from './helpers/app.js'
 
 let h: Awaited<ReturnType<typeof openApp>>
 
@@ -77,6 +77,87 @@ describe('creating a job over the API', () => {
 
     expect(read.statusCode).toBe(200)
     expect((read.json() as { id: string }).id).toBe(id)
+  })
+
+  /**
+   * The test above carries the cookie the create response set, which is why the
+   * suite never noticed this: a script does not. `curl` without `-c/-b`,
+   * `requests.post` without a Session, a `fetch` in a shell one-liner — none of
+   * them keep cookies, and every cookie-less request used to mint a fresh
+   * anonymous visitor, so the poll asked as somebody who had never created
+   * anything and got told the job did not exist. The create response hands back
+   * a token for exactly this, so a script needs no cookie jar.
+   */
+  it('lets a script poll a job without carrying a cookie', async () => {
+    const created = await create({ tool: 'resize', mode: 'pixels', width: '100' }, [
+      { name: 'files', filename: 'a.png', data: await samplePng() },
+    ])
+    const { id, statusUrl, token } = created.json() as {
+      id: string
+      statusUrl: string
+      token: string
+    }
+
+    const read = await h.app.inject({
+      method: 'GET',
+      url: statusUrl,
+      headers: { 'x-job-token': token },
+    })
+
+    expect(read.statusCode).toBe(200)
+    expect((read.json() as { id: string }).id).toBe(id)
+  })
+
+  it('lets that script download the result without carrying a cookie either', async () => {
+    const created = await create({ tool: 'resize', mode: 'pixels', width: '60' }, [
+      { name: 'files', filename: 'a.png', data: await samplePng() },
+    ])
+    const { statusUrl, token } = created.json() as { statusUrl: string; token: string }
+    const carrying = { 'x-job-token': token }
+
+    await h.ctx.queue.close()
+    const read = await h.app.inject({ method: 'GET', url: statusUrl, headers: carrying })
+    const [output] = (read.json() as { outputs: { url: string }[] }).outputs
+    expect(output).toBeDefined()
+    const file = await h.app.inject({ method: 'GET', url: output!.url, headers: carrying })
+
+    expect(file.statusCode).toBe(200)
+    expect(file.rawPayload.length).toBeGreaterThan(0)
+  })
+
+  it('does not add an account for every poll a script makes', async () => {
+    // Thirty polls of one job used to leave thirty user rows behind, in a
+    // database nobody prunes.
+    const created = await create({ tool: 'resize', mode: 'pixels', width: '100' }, [
+      { name: 'files', filename: 'a.png', data: await samplePng() },
+    ])
+    const { statusUrl, token } = created.json() as { statusUrl: string; token: string }
+    const before = await h.ctx.users.countUsers()
+
+    for (let i = 0; i < 5; i += 1) {
+      await h.app.inject({ method: 'GET', url: statusUrl, headers: { 'x-job-token': token } })
+    }
+
+    expect(await h.ctx.users.countUsers()).toBe(before)
+  })
+
+  it('refuses a caller with neither the cookie nor the token', async () => {
+    // The id is not the permission: a job id that turns up in a log, a pasted
+    // link or someone's history does not open the file.
+    const created = await create({ tool: 'resize', mode: 'pixels', width: '100' }, [
+      { name: 'files', filename: 'a.png', data: await samplePng() },
+    ])
+    const { statusUrl, token } = created.json() as { statusUrl: string; token: string }
+
+    const bare = await h.app.inject({ method: 'GET', url: statusUrl })
+    const wrong = await h.app.inject({
+      method: 'GET',
+      url: statusUrl,
+      headers: { 'x-job-token': `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}` },
+    })
+
+    expect(bare.statusCode).toBe(404)
+    expect(wrong.statusCode).toBe(404)
   })
 
   it('says which tool it does not have', async () => {
@@ -166,6 +247,40 @@ describe('the API under accounts mode', () => {
   })
 })
 
+describe('one account cannot see another account\'s job', () => {
+  let h: Awaited<ReturnType<typeof testApp>>
+
+  beforeEach(async () => {
+    h = await testApp()
+  })
+  afterEach(() => h.close())
+
+  it('keeps the job to the account that created it', async () => {
+    // With accounts switched off the job id is the permission, because there is
+    // nothing else it could be. With accounts on, ownership decides — and the
+    // change that made scripts work must not have quietly loosened this.
+    const mine = await signIn(h, 'first@example.test')
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { ...headers, cookie: mine.cookie },
+      payload: multipart({ tool: 'resize', mode: 'pixels', width: '100' }, [
+        { name: 'files', filename: 'a.png', data: await samplePng() },
+      ]),
+    })
+    const { id } = created.json() as { id: string }
+
+    const theirs = await signIn(h, 'second@example.test')
+    const peek = await h.app.inject({
+      method: 'GET',
+      url: `/api/jobs/${id}`,
+      headers: { cookie: theirs.cookie },
+    })
+
+    expect(peek.statusCode).toBe(404)
+  })
+})
+
 describe('the documentation', () => {
   const docs = async () => (await h.app.inject({ method: 'GET', url: '/api/docs' })).body
 
@@ -199,6 +314,15 @@ describe('the documentation', () => {
     // schema; nothing verifies a key. Documenting it invites a support call at
     // best and a false sense of security at worst.
     expect(await docs()).not.toContain('Bearer')
+  })
+
+  it('teaches a script how to read back the job it created', async () => {
+    // Without this the create call succeeds and every poll answers 404, which
+    // reads as a broken server rather than a missing header.
+    const body = await docs()
+
+    expect(body).toContain('X-Job-Token')
+    expect(body).toMatch(/curl[\s\S]{0,400}X-Job-Token/)
   })
 
   it('shows an example that would actually work', async () => {

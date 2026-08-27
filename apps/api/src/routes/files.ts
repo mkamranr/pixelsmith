@@ -3,13 +3,14 @@ import archiver from 'archiver'
 import type { FastifyInstance } from 'fastify'
 import type { AppContext } from '../context.js'
 import { NotFoundError } from '../errors.js'
+import { jobFor } from '../job-access.js'
 
 export async function registerFiles(app: FastifyInstance, ctx: AppContext) {
   /** Download one output file. */
-  app.get('/jobs/:id/files/:fileId', { preHandler: app.requireUser }, async (req, reply) => {
+  app.get('/jobs/:id/files/:fileId', { preHandler: app.requireViewer }, async (req, reply) => {
     const { id, fileId } = req.params as { id: string; fileId: string }
 
-    const job = await ctx.jobs.getJobForUser(id, req.currentUser!.id)
+    const job = await jobFor(ctx, req, id)
     if (!job) throw new NotFoundError('Job')
 
     // Inputs are served as well as outputs, so the results page can show a
@@ -32,10 +33,10 @@ export async function registerFiles(app: FastifyInstance, ctx: AppContext) {
   })
 
   /** Download every output as one zip, built streaming so nothing buffers. */
-  app.get('/jobs/:id/download', { preHandler: app.requireUser }, async (req, reply) => {
+  app.get('/jobs/:id/download', { preHandler: app.requireViewer }, async (req, reply) => {
     const { id } = req.params as { id: string }
 
-    const job = await ctx.jobs.getJobForUser(id, req.currentUser!.id)
+    const job = await jobFor(ctx, req, id)
     if (!job) throw new NotFoundError('Job')
 
     const outputs = (await ctx.jobs.listFiles(job.id)).filter((f) => f.role === 'output')
