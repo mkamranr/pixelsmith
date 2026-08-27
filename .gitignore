@@ -31,3 +31,12 @@ apps/api/public/vendor/
 
 # Brand assets derived from assets/brand/ at build time.
 apps/api/public/brand/
+
+# Local Python virtualenv for the inference sidecar. The service is built from
+# services/inference/requirements.txt; the environment itself is not source.
+.venv-inference/
+.venv/
+
+# Local editor and assistant configuration, not part of the project.
+.claude/
+CLAUDE.md
