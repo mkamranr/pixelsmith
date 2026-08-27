@@ -1687,3 +1687,123 @@ input.is-driven { display: none; }
   bottom: 0;
   z-index: 2;
 }
+
+/* ---- Marked areas, for redaction --------------------------------------- */
+/* Drawn solid, because that is what the result looks like: the mark is the
+   preview, not a hint at one. */
+.pdf-mark {
+  position: absolute;
+  background: rgba(16, 18, 26, 0.92);
+  cursor: move;
+}
+
+.pdf-mark.is-chosen {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pdf-mark-drop {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pdf-marks { margin-bottom: 14px; }
+.pdf-marks-title { margin: 0 0 8px; font-size: 0.8125rem; }
+.pdf-marks-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.pdf-marks-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.pdf-marks-item.is-chosen { border-color: var(--accent); }
+
+.pdf-marks-jump {
+  flex: 1;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pdf-marks-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border: 0;
+  border-radius: var(--radius-pill);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pdf-marks-remove:hover { background: var(--surface); color: var(--text); }
+
+/* ---- A mark placed on the page (signature, watermark) ------------------ */
+/* Shown as it will come out — colour, fade and angle included — so the page is
+   the preview rather than a diagram of one. */
+.pdf-placed {
+  position: absolute;
+  cursor: move;
+  line-height: 1;
+}
+
+.pdf-placed img { display: block; width: 100%; height: auto; }
+
+.pdf-placed-text {
+  display: block;
+  font-family: 'DejaVu Sans', 'Liberation Sans', Helvetica, Arial, sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.pdf-placed:hover { outline: 1px dashed var(--accent); outline-offset: 3px; }
+
+.pdf-placed.is-empty {
+  padding: 10px 14px;
+  outline: 1px dashed var(--border-strong);
+  outline-offset: 0;
+}
+
+.pdf-placed.is-empty .pdf-placed-text {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.pdf-tiled-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  /* The lattice covers the page, so there is nothing here to drag. */
+  pointer-events: none;
+}

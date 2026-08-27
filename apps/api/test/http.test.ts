@@ -641,3 +641,95 @@ describe('editing a PDF on the page rather than in the fields', () => {
     expect(res.body).not.toContain('data-pdf-edit')
   })
 })
+
+describe('placing a mark on the page', () => {
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `place-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  it('gives signing a page to drag the signature onto', async () => {
+    const res = await workspace('sign-pdf')
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatch(/data-pdf-edit-mode="place"/)
+    expect(res.body).toContain('/static/pdfedit.js')
+  })
+
+  it('keeps the signature file picker, which is where the mark comes from', async () => {
+    const res = await workspace('sign-pdf')
+    expect(res.body).toMatch(/name="signatureFile"/)
+  })
+
+  it('defaults a signature to the page on screen, not to every page', async () => {
+    // A signature belongs on one page; a watermark belongs on all of them.
+    const res = await workspace('sign-pdf')
+    expect(res.body).toMatch(/value="current"[^>]*checked|checked[^>]*value="current"/)
+  })
+
+  it('gives the watermark somewhere to be dragged too', async () => {
+    const res = await workspace('pdf-watermark')
+    expect(res.body).toMatch(/data-pdf-edit-mode="place"/)
+  })
+})
+
+describe('how declared fields are rendered', () => {
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `fields-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  it('renders a file field as a file picker', async () => {
+    /**
+     * It fell through to a text input, so choosing a signature meant typing a
+     * path into a box that did nothing. Same field kind, same defect, on the
+     * image watermark.
+     */
+    const res = await workspace('sign-pdf')
+    expect(res.body).toMatch(/<input type="file"[^>]*name="signatureFile"/)
+  })
+
+  it('renders every declared field exactly once', async () => {
+    /**
+     * Counted by wrapper rather than by input name: a segmented field is a
+     * group of radios that share a name on purpose. Two wrappers for one field
+     * means two inputs posting two values, and the second one wins.
+     */
+    for (const tool of ['sign-pdf', 'pdf-crop', 'redact-pdf', 'pdf-watermark']) {
+      const res = await workspace(tool)
+      const wrappers = [...res.body.matchAll(/data-field="([a-zA-Z]+)"/g)].map((m) => m[1])
+      const counted = new Map<string, number>()
+      for (const name of wrappers) counted.set(name!, (counted.get(name!) ?? 0) + 1)
+
+      const twice = [...counted.entries()].filter(([, times]) => times > 1)
+      expect(twice, `${tool} renders ${JSON.stringify(twice)} twice`).toEqual([])
+    }
+  })
+})
+
+describe('what a placed mark defaults to', () => {
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `scope-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  /** Which scope radio carries the checked attribute. */
+  const checkedScope = (body: string) => {
+    const match = /<input type="radio" name="pdfScope" value="(all|current)"\s*\n?\s*checked/.exec(body)
+    return match ? match[1] : null
+  }
+
+  it('signs the page in front of you', async () => {
+    expect(checkedScope((await workspace('sign-pdf')).body)).toBe('current')
+  })
+
+  it('watermarks the whole document', async () => {
+    // A watermark on one page of forty is not a watermark. The interaction is
+    // the same as signing; the intent is the opposite.
+    expect(checkedScope((await workspace('pdf-watermark')).body)).toBe('all')
+  })
+
+  it('crops the whole document', async () => {
+    expect(checkedScope((await workspace('pdf-crop')).body)).toBe('all')
+  })
+})

@@ -102,23 +102,48 @@
       <button type="button" class="btn btn-quiet btn-sm" data-pdf-reset>Reset all</button>
     </div>
 
+    {% if tool.ui.pdfEdit == 'boxes' %}
+      <div class="pdf-marks" data-pdf-marks hidden>
+        <h3 class="pdf-marks-title">Marked</h3>
+        <ol class="pdf-marks-list" data-pdf-marks-list></ol>
+      </div>
+    {% endif %}
+
+    {% if tool.ui.pdfEdit != 'boxes' %}
+    {# Each mark carries its own page, so a document-wide scope only makes
+       sense for a single-area edit. #}
     <fieldset class="pdf-scope" data-pdf-scope>
       <legend>Pages</legend>
       {# Not a tool parameter: the script turns this into the pages field below. #}
-      <label class="check-row"><input type="radio" name="pdfScope" value="all" checked> All pages</label>
-      <label class="check-row"><input type="radio" name="pdfScope" value="current"> Current page</label>
+      <label class="check-row">
+        <input type="radio" name="pdfScope" value="all"
+               {% if tool.ui.pdfScope != 'current' %}checked{% endif %}> Every page
+      </label>
+      <label class="check-row">
+        <input type="radio" name="pdfScope" value="current"
+               {% if tool.ui.pdfScope == 'current' %}checked{% endif %}> This page
+      </label>
     </fieldset>
-
-    {% if tool.ui.fields | length %}
-      {# Kept, and kept working: the numbers are what gets posted, and they can
-         still be typed if someone would rather. #}
-      <details class="pdf-fine" data-pdf-fine>
-        <summary>Exact numbers</summary>
-        <div class="panel-fields">
-          {% for f in tool.ui.fields %}{{ m.field(f) }}{% endfor %}
-        </div>
-      </details>
     {% endif %}
+
+    {#
+      Two groups. What someone genuinely sets — the words, the colour, which
+      signature — stays in plain view. What the page itself sets by being
+      dragged on folds away: still there, still posted, still typeable, but no
+      longer the way in.
+    #}
+    {% set placed = ['x', 'y', 'width', 'height', 'regions', 'pages'] %}
+
+    <div class="panel-fields">
+      {% for f in tool.ui.fields %}{% if not (f.name in placed) %}{{ m.field(f) }}{% endif %}{% endfor %}
+    </div>
+
+    <details class="pdf-fine" data-pdf-fine>
+      <summary>Exact numbers</summary>
+      <div class="panel-fields">
+        {% for f in tool.ui.fields %}{% if f.name in placed %}{{ m.field(f) }}{% endif %}{% endfor %}
+      </div>
+    </details>
 
     <div class="panel-footer">
       <button class="btn btn-primary btn-block btn-lg" type="submit">

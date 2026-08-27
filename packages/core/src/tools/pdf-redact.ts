@@ -4,6 +4,7 @@ import { PDFDocument } from 'pdf-lib'
 import sharp from 'sharp'
 import { z } from 'zod'
 import { BadInputError } from '../errors.js'
+import { findTextBoxes, type RedactPattern } from '../pdf-find.js'
 import { loadPdf, PDF_MIME } from '../pdf.js'
 import { renderPdfPages } from '../pdf-render.js'
 import { uniqueName } from '../naming.js'
@@ -46,7 +47,7 @@ export function parseRedactBoxes(raw: string): RedactBox[] {
     throw new BadInputError('the marked areas could not be read')
   }
 
-  const parsed = z.array(RedactBox).min(1).max(500).safeParse(json)
+  const parsed = z.array(RedactBox).max(500).safeParse(json)
   if (!parsed.success) {
     throw new BadInputError(
       `a marked area is not valid: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
@@ -55,9 +56,25 @@ export function parseRedactBoxes(raw: string): RedactBox[] {
   return parsed.data
 }
 
+/**
+ * A little more than the glyphs themselves, as a fraction of their height.
+ * Covering slightly too much is the safe direction; a sliver of a name left
+ * showing at the edge of a box is not.
+ */
+const FIND_PADDING = 0.15
+
 export const RedactPdfParams = z
   .object({
-    regions: z.string().max(200_000),
+    regions: z.string().max(200_000).default(''),
+    /**
+     * Phrases to find and cover, one per line. Marking by hand is fine for one
+     * box on one page; finding every occurrence of a name across forty pages is
+     * not, and the words are the better instruction.
+     */
+    findText: z.string().max(2000).optional(),
+    redactEmails: z.boolean().default(false),
+    redactPhones: z.boolean().default(false),
+    redactCards: z.boolean().default(false),
     /**
      * The resolution the redacted document is rebuilt at. 150 keeps text
      * comfortably readable at print size without tripling the file size.
@@ -65,14 +82,38 @@ export const RedactPdfParams = z
     dpi: z.coerce.number().int().min(72).max(300).default(150),
   })
   .superRefine((value, ctx) => {
-    if (parseBoxesOrEmpty(value.regions).length === 0) {
+    const marked = parseBoxesOrEmpty(value.regions).length > 0
+    const searched = (value.findText ?? '').trim() !== ''
+    const swept = value.redactEmails || value.redactPhones || value.redactCards
+
+    if (!marked && !searched && !swept) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'mark at least one area to redact',
+        message: 'mark an area on the page, or give a phrase or a kind of value to look for',
         path: ['regions'],
       })
     }
   })
+
+/** The phrases to look for, one per line. */
+function termsFrom(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split('\n')
+    .map((term) => term.trim())
+    .filter((term) => term !== '')
+}
+
+function patternsFrom(params: {
+  redactEmails: boolean
+  redactPhones: boolean
+  redactCards: boolean
+}): RedactPattern[] {
+  const patterns: RedactPattern[] = []
+  if (params.redactEmails) patterns.push('email')
+  if (params.redactPhones) patterns.push('phone')
+  if (params.redactCards) patterns.push('card')
+  return patterns
+}
 
 export type RedactPdfParams = z.infer<typeof RedactPdfParams>
 
@@ -86,13 +127,19 @@ export const redactPdf: Tool<RedactPdfParams> = {
   ui: {
     group: 'pdf-secure',
     icon: 'square-slash',
-    surface: 'canvas',
+    surface: 'pdfedit',
+    pdfEdit: 'boxes',
     preview: 'none',
     blurb:
-      'Black out anything that must not leave the building. Every page is rebuilt as an image, so the hidden words are genuinely gone from the file and not merely covered — which also means the document is no longer searchable. Run OCR PDF afterwards if you need that back.',
+      'Black out anything that must not leave the building — drag over it on the page, or name the words and let every occurrence be found. Every page is rebuilt as an image, so the hidden words are genuinely gone from the file and not merely covered, which also means the document is no longer searchable. Run OCR PDF afterwards if you need that back.',
     fields: [
+      { name: 'findText', label: 'Words to remove', kind: 'textarea',
+        help: 'One phrase per line. Every occurrence is found, whatever the case.' },
+      { name: 'redactEmails', label: 'Any email address', kind: 'toggle', default: false },
+      { name: 'redactPhones', label: 'Any telephone number', kind: 'toggle', default: false },
+      { name: 'redactCards', label: 'Any card number', kind: 'toggle', default: false },
       { name: 'regions', label: 'Marked areas', kind: 'textarea',
-        help: 'Drag on a page to mark what to remove.' },
+        help: 'Set by dragging on the page.' },
       { name: 'dpi', label: 'Rebuild detail (dpi)', kind: 'number', min: 72, max: 300, default: 150,
         help: 'Higher keeps small print sharper and makes a larger file.' },
     ],
@@ -101,11 +148,22 @@ export const redactPdf: Tool<RedactPdfParams> = {
   async run({ inputs, outDir, params, onProgress }) {
     const taken = new Set<string>()
     const outputs = []
-    const boxes = parseRedactBoxes(params.regions)
+    const marked = params.regions.trim() === '' ? [] : parseRedactBoxes(params.regions)
+    const terms = termsFrom(params.findText)
+    const patterns = patternsFrom(params)
 
     for (const input of inputs) {
       const source = await loadPdf(input.path)
       const pageCount = source.getPageCount()
+
+      /**
+       * Searching happens here rather than in the browser: the coordinates come
+       * from the document itself rather than from a picture of it, so they are
+       * exact — and it works with no script involved.
+       */
+      const boxes = marked.concat(
+        await findTextBoxes(input.path, { terms, patterns, padding: FIND_PADDING }),
+      )
 
       for (const box of boxes) {
         if (box.page > pageCount) {

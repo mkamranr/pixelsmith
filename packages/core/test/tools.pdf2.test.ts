@@ -223,3 +223,37 @@ describe('watermarking a PDF in a script the standard fonts cannot encode', () =
     expect((await extractPdfText(outs[0]!.path))[0]).toContain('CONFIDENTIAL')
   })
 })
+
+/**
+ * A watermark that can only sit in the middle cannot be dragged anywhere, and
+ * dragging it is the point — so it takes a position, given the same way every
+ * other placed thing here is: fractions from the top left.
+ */
+describe('placing a PDF watermark', () => {
+  const TOP_LEFT = { x: 0.02, y: 0.02, width: 0.4, height: 0.16 }
+  const CENTRE = { x: 0.3, y: 0.42, width: 0.4, height: 0.16 }
+
+  it('sits in the middle when told nothing', async () => {
+    const src = await blankPdf('wm-default.pdf', 1)
+    const outs = await run(pdfWatermark, [src], { text: 'DRAFT' })
+
+    expect(await inkInRegion(outs[0]!.path, 1, CENTRE)).toBeGreaterThan(2)
+    expect(await inkInRegion(outs[0]!.path, 1, TOP_LEFT)).toBeLessThan(1)
+  })
+
+  it('goes where it is put', async () => {
+    const src = await blankPdf('wm-placed.pdf', 1)
+    const outs = await run(pdfWatermark, [src], { text: 'DRAFT', x: 0.05, y: 0.04 })
+
+    expect(await inkInRegion(outs[0]!.path, 1, TOP_LEFT)).toBeGreaterThan(2)
+    expect(await inkInRegion(outs[0]!.path, 1, CENTRE)).toBeLessThan(1)
+  })
+
+  it('ignores a position when the mark is tiled, which covers the page anyway', async () => {
+    const src = await blankPdf('wm-tiled-pos.pdf', 1)
+    const outs = await run(pdfWatermark, [src], { text: 'DRAFT', tiled: true, x: 0.05, y: 0.04 })
+
+    expect(await inkInRegion(outs[0]!.path, 1, TOP_LEFT)).toBeGreaterThan(2)
+    expect(await inkInRegion(outs[0]!.path, 1, CENTRE)).toBeGreaterThan(2)
+  })
+})

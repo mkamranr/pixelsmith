@@ -58,7 +58,10 @@ export const signPdf: Tool<SignPdfParams> = {
   ui: {
     group: 'pdf-secure',
     icon: 'pen-line',
-    surface: 'canvas',
+    surface: 'pdfedit',
+    pdfEdit: 'place',
+    // A signature goes on one page, and by default the one being looked at.
+    pdfScope: 'current',
     preview: 'none',
     blurb:
       'Place a signature on a document — a scanned image of your own, or your name set in type. The rest of the document is left exactly as it was.',

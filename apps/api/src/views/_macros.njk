@@ -50,6 +50,10 @@
            {% if f.default is defined %}value="{{ f.default }}"{% endif %}
            placeholder="auto">
 
+  {% elif f.kind == 'file' %}
+    {# These fields carry an image the tool draws with — a signature, a mark. #}
+    <input type="file" id="f-{{ f.name }}" name="{{ f.name }}" accept="image/*">
+
   {% elif f.kind == 'color' %}
     <input type="color" id="f-{{ f.name }}" name="{{ f.name }}" value="{{ f.default or '#ffffff' }}">
 

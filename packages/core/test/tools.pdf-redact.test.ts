@@ -108,3 +108,80 @@ describe('redact a PDF', () => {
     await expect(run({ regions: beyond })).rejects.toThrow(/page 9/i)
   })
 })
+
+/** Mean brightness of a region of a rendered page; 0 is solid black. */
+async function brightnessAt(
+  path: string,
+  page: number,
+  box: { x: number; y: number; width: number; height: number },
+): Promise<number> {
+  const png = await renderPdfPage(path, page, { scale: 1 })
+  const image = sharp(png)
+  const { width, height } = await image.metadata()
+  const region = await image
+    .clone()
+    .extract({
+      left: Math.round(box.x * width!),
+      top: Math.round(box.y * height!),
+      width: Math.max(1, Math.round(box.width * width!)),
+      height: Math.max(1, Math.round(box.height * height!)),
+    })
+    .toBuffer()
+  return (await sharp(region).stats()).channels[0]!.mean
+}
+
+/**
+ * Marking by hand is fine for one box on one page. Finding every occurrence of a
+ * name across forty pages is not, which is why the words themselves can be the
+ * instruction.
+ */
+describe('redacting by what the words say', () => {
+  let byWords: string
+
+  beforeAll(async () => {
+    const pdf = await PDFDocument.create()
+    const font = await pdf.embedFont(StandardFonts.Helvetica)
+    const page = pdf.addPage([400, 500])
+    page.drawText('SECRET', { x: 40, y: 400, size: 24, font })
+    page.drawText('keep me', { x: 40, y: 200, size: 24, font })
+    page.drawText('reach a.nadir@example.test', { x: 40, y: 100, size: 14, font })
+    byWords = join(dir, 'by-words.pdf')
+    await writeFile(byWords, await pdf.save())
+  })
+
+  it('takes a phrase instead of coordinates', () => {
+    expect(redactPdf.params.safeParse({ findText: 'SECRET' }).success).toBe(true)
+    expect(redactPdf.params.safeParse({ redactEmails: true }).success).toBe(true)
+    // Still refuses a job that would do nothing at all.
+    expect(redactPdf.params.safeParse({}).success).toBe(false)
+  })
+
+  it('blacks out the phrase and leaves the rest of the page alone', async () => {
+    const outs = await run({ findText: 'SECRET' }, [byWords])
+
+    // Where SECRET was: covered.
+    expect(await brightnessAt(outs[0]!.path, 1, { x: 0.1, y: 0.17, width: 0.2, height: 0.04 }))
+      .toBeLessThan(60)
+    // Where the words to keep are: still paper and ink, not a black bar.
+    expect(await brightnessAt(outs[0]!.path, 1, { x: 0.05, y: 0.56, width: 0.4, height: 0.1 }))
+      .toBeGreaterThan(150)
+  })
+
+  it('removes the phrase from the file, not just from view', async () => {
+    const outs = await run({ findText: 'SECRET' }, [byWords])
+    expect((await extractPdfText(outs[0]!.path)).join(' ')).not.toContain('SECRET')
+  })
+
+  it('finds an email address without being told the address', async () => {
+    const outs = await run({ redactEmails: true }, [byWords])
+    expect(await brightnessAt(outs[0]!.path, 1, { x: 0.25, y: 0.78, width: 0.3, height: 0.04 }))
+      .toBeLessThan(90)
+  })
+
+  it('does nothing to a document that does not contain the phrase', async () => {
+    const outs = await run({ findText: 'nowhere-in-here' }, [byWords])
+    // Rasterised, so the text is gone either way — but nothing is blacked out.
+    expect(await brightnessAt(outs[0]!.path, 1, { x: 0.1, y: 0.17, width: 0.2, height: 0.04 }))
+      .toBeGreaterThan(150)
+  })
+})

@@ -47,6 +47,13 @@ export interface ToolUi {
    */
   pdfEdit?: 'crop' | 'boxes' | 'place'
   /**
+   * Whether the edit starts out applying to the whole document or to the page
+   * on screen. Not derivable from the interaction: signing and watermarking are
+   * the same gesture with opposite intent — a signature belongs on one page, a
+   * watermark on a watermark on every one. Defaults to the whole document.
+   */
+  pdfScope?: 'all' | 'current'
+  /**
    * Which PDF workspace suits the tool: a grid of one document's pages, or a
    * card per document. Merging is about the order of files, so a grid of the
    * first upload's pages would be the wrong thing to show.

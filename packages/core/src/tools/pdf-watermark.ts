@@ -25,6 +25,13 @@ export const PdfWatermarkParams = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default('#c2410c'),
   rotation: z.coerce.number().min(-90).max(90).default(-30),
   tiled: z.boolean().default(false),
+  /**
+   * Where the mark's top left corner sits, as fractions of the page. Absent
+   * means the middle, which is where a watermark goes unless someone moves it.
+   * Ignored when tiled: a lattice covers the page regardless.
+   */
+  x: z.coerce.number().min(0).max(1).optional(),
+  y: z.coerce.number().min(0).max(1).optional(),
   pages: z.string().trim().max(400).optional(),
 })
 
@@ -40,9 +47,10 @@ export const pdfWatermark: Tool<PdfWatermarkParams> = {
   ui: {
     group: 'pdf-secure',
     icon: 'stamp',
-    surface: 'canvas',
+    surface: 'pdfedit',
+    pdfEdit: 'place',
     preview: 'none',
-    blurb: 'Stamp text across every page before a document leaves your hands.',
+    blurb: 'Stamp text across a document before it leaves your hands. Drag the mark to where it should sit, or tile it over the whole page.',
     fields: [
       { name: 'text', label: 'Watermark text', kind: 'text', default: 'CONFIDENTIAL' },
       { name: 'tiled', label: 'Repeat across the whole page', kind: 'toggle', default: false },
@@ -51,6 +59,9 @@ export const pdfWatermark: Tool<PdfWatermarkParams> = {
       { name: 'fontSize', label: 'Text size', kind: 'number', min: 8, max: 200,
         help: 'Leave blank to scale with the page.' },
       { name: 'pages', label: 'Pages', kind: 'text', help: 'Leave blank to mark every page.' },
+      { name: 'x', label: 'From the left', kind: 'number', min: 0, max: 1, step: 0.01,
+        help: 'Set by dragging the mark. Blank centres it.' },
+      { name: 'y', label: 'From the top', kind: 'number', min: 0, max: 1, step: 0.01 },
     ],
   },
 
@@ -98,12 +109,12 @@ export const pdfWatermark: Tool<PdfWatermarkParams> = {
             }
           }
         } else {
-          mark.draw(page, {
-            x: (width - mark.width) / 2,
-            y: height / 2,
-            opacity,
-            rotate: params.rotation,
-          })
+          // The mark is positioned by its top left corner, the way everything
+          // placed on a page here is; PDF measures up from the bottom.
+          const left = params.x === undefined ? (width - mark.width) / 2 : params.x * width
+          const baseline =
+            params.y === undefined ? height / 2 : height - params.y * height - mark.height
+          mark.draw(page, { x: left, y: baseline, opacity, rotate: params.rotation })
         }
       }
 

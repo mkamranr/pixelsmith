@@ -17,11 +17,27 @@ const WORD_GAP = 1
  */
 const CELL_GAP = 8
 
-interface Piece {
+export interface TextPiece {
   x: number
   y: number
   width: number
+  /** Roughly the type size, which is what a glyph's height is measured from. */
+  height: number
   str: string
+}
+
+export interface PageText {
+  /** The page's own size in points, with any rotation already applied. */
+  width: number
+  height: number
+  lines: TextPiece[][]
+}
+
+/** Where a piece's characters sit within its line's assembled string. */
+export interface PieceSpan {
+  piece: TextPiece
+  start: number
+  end: number
 }
 
 /**
@@ -36,18 +52,19 @@ interface Piece {
  * baselines, so their lines interleave. Telling those apart from a table needs
  * layout analysis this does not attempt.
  */
-async function pageLines(path: string): Promise<Piece[][][]> {
+export async function pdfPageText(path: string): Promise<PageText[]> {
   const doc = await openDocument(path)
 
   try {
-    const pages: Piece[][][] = []
+    const pages: PageText[] = []
 
     for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
       const page = await doc.getPage(pageNumber)
 
       try {
         const content = await page.getTextContent()
-        const lines: Piece[][] = []
+        const viewport = page.getViewport({ scale: 1 })
+        const lines: TextPiece[][] = []
 
         for (const item of content.items) {
           // Marked-content boundaries appear in the same list and carry no text.
@@ -61,10 +78,11 @@ async function pageLines(path: string): Promise<Piece[][][]> {
            */
           if (item.str.trim() === '') continue
           const transform = item.transform as number[]
-          const piece: Piece = {
+          const piece: TextPiece = {
             x: transform[4]!,
             y: transform[5]!,
             width: item.width ?? 0,
+            height: item.height ?? 0,
             str: item.str,
           }
 
@@ -75,7 +93,7 @@ async function pageLines(path: string): Promise<Piece[][][]> {
 
         lines.sort((a, b) => b[0]!.y - a[0]!.y)
         for (const line of lines) line.sort((a, b) => a.x - b.x)
-        pages.push(lines)
+        pages.push({ width: viewport.width, height: viewport.height, lines })
       } finally {
         page.cleanup()
       }
@@ -87,26 +105,38 @@ async function pageLines(path: string): Promise<Piece[][][]> {
   }
 }
 
-/** Join pieces into one string, inserting a space only where there is a gap. */
-function joinPieces(pieces: Piece[]): string {
+/**
+ * Join pieces into one string, inserting a space only where there is a gap, and
+ * record where each piece's characters ended up. The offsets are what lets a
+ * match found in the string be turned back into a box on the page.
+ */
+export function joinWithSpans(pieces: TextPiece[]): { text: string; spans: PieceSpan[] } {
   let text = ''
   let cursor: number | undefined
+  const spans: PieceSpan[] = []
 
   for (const piece of pieces) {
     const gapped = cursor !== undefined && piece.x - cursor > WORD_GAP
     // Do not manufacture a space next to one the document already has.
     if (gapped && !text.endsWith(' ') && !piece.str.startsWith(' ')) text += ' '
+    const start = text.length
     text += piece.str
+    spans.push({ piece, start, end: text.length })
     cursor = piece.x + piece.width
   }
 
-  return text
+  return { text, spans }
+}
+
+/** Join pieces into one string, inserting a space only where there is a gap. */
+function joinPieces(pieces: TextPiece[]): string {
+  return joinWithSpans(pieces).text
 }
 
 /** The text of each page, one string per page, lines separated by newlines. */
 export async function extractPdfText(path: string): Promise<string[]> {
-  const pages = await pageLines(path)
-  return pages.map((lines) => lines.map(joinPieces).join('\n'))
+  const pages = await pdfPageText(path)
+  return pages.map((page) => page.lines.map(joinPieces).join('\n'))
 }
 
 /**
@@ -119,11 +149,11 @@ export async function extractPdfRows(
   options: { cellGap?: number } = {},
 ): Promise<string[][][]> {
   const cellGap = options.cellGap ?? CELL_GAP
-  const pages = await pageLines(path)
+  const pages = await pdfPageText(path)
 
-  return pages.map((lines) =>
-    lines.map((line) => {
-      const cells: Piece[][] = []
+  return pages.map((page) =>
+    page.lines.map((line) => {
+      const cells: TextPiece[][] = []
       let cursor: number | undefined
 
       for (const piece of line) {

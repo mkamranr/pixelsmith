@@ -1,18 +1,22 @@
 // Editing a document on the page itself.
 //
-// The page is rendered at a readable size and the edit is made on it directly:
-// drag out the area to keep, move it, pull its handles. The numbers in the panel
-// are the same numbers — they are what gets posted, and they stay editable — so
-// with this file absent the tool still works, just by typing.
+// The page is rendered at a readable size and the edit is made on it directly.
+// Two interactions ride on the same viewer, declared by the tool: `crop` is a
+// single area to keep, `boxes` is any number of areas to cover.
 //
-// Written to serve several tools. `crop` is one rectangle; `boxes` and `place`
-// will hang off the same viewer.
+// The fields in the panel hold the same values, are what actually gets posted,
+// and stay editable — so with this file absent the tools still work, just by
+// typing.
 'use strict'
 ;(function () {
   var form = document.querySelector('[data-pdf-edit]')
   if (!form) return
 
   var mode = form.getAttribute('data-pdf-edit-mode') || 'crop'
+  var isCrop = mode === 'crop'
+  var isBoxes = mode === 'boxes'
+  var isPlace = mode === 'place'
+
   var input = form.querySelector('[data-file-input]')
   var dropzone = form.querySelector('[data-dropzone]')
   var viewer = form.querySelector('[data-pdf-viewer]')
@@ -27,6 +31,8 @@
   var zoomLabel = form.querySelector('[data-pdf-zoom-label]')
   var nameLabel = form.querySelector('[data-pdf-name]')
   var hint = form.querySelector('[data-pdf-hint]')
+  var marksPanel = form.querySelector('[data-pdf-marks]')
+  var marksList = form.querySelector('[data-pdf-marks-list]')
 
   var fields = {
     x: form.querySelector('[name="x"]'),
@@ -34,9 +40,22 @@
     width: form.querySelector('[name="width"]'),
     height: form.querySelector('[name="height"]'),
     pages: form.querySelector('[name="pages"]'),
+    regions: form.querySelector('[name="regions"]'),
+    text: form.querySelector('[name="text"]'),
+    kind: form.querySelector('[name="kind"]'),
+    fontSize: form.querySelector('[name="fontSize"]'),
+    color: form.querySelector('[name="color"]'),
+    opacity: form.querySelector('[name="opacity"]'),
+    rotation: form.querySelector('[name="rotation"]'),
+    tiled: form.querySelector('[name="tiled"]'),
+    signature: form.querySelector('[name="signatureFile"]'),
   }
 
-  var MIN_SIZE = 0.02
+  /** Whether the mark's size is ours to set, or comes from a type size. */
+  var sizedByWidth = Boolean(fields.width)
+
+  var MIN_SIZE = 0.015
+  var PLACED_FONT = "'DejaVu Sans', 'Liberation Sans', Helvetica, Arial, sans-serif"
   var ZOOM_STEP = 1.25
   var ZOOM_MIN = 0.25
   var ZOOM_MAX = 4
@@ -47,9 +66,19 @@
   var current = 1
   var zoom = 1
   var pdfjsPromise = null
-  /** The area to keep, as fractions of the page from its top left. */
+
+  /** crop: the single area to keep, in fractions of the page. */
   var rect = { x: 0, y: 0, w: 1, h: 1 }
-  var selection = null
+  var cropSelection = null
+
+  /** place: one mark, dragged to where it belongs. */
+  var placed = { x: 0.6, y: 0.8, w: 0.28 }
+  var placedNode = null
+  var signatureUrl = null
+
+  /** boxes: every marked area, each carrying the page it belongs to. */
+  var marks = []
+  var chosen = null
   var drag = null
 
   function clamp(value, low, high) {
@@ -79,64 +108,307 @@
     }
   }
 
-  // ---- the numbers in the panel -------------------------------------------
+  // ---- the fields, which are what gets posted -----------------------------
 
   function writeFields() {
-    if (fields.x) fields.x.value = String(round(rect.x))
-    if (fields.y) fields.y.value = String(round(rect.y))
-    if (fields.width) fields.width.value = String(round(rect.w))
-    if (fields.height) fields.height.value = String(round(rect.h))
+    if (isPlace) {
+      if (fields.x) fields.x.value = String(round(placed.x))
+      if (fields.y) fields.y.value = String(round(placed.y))
+      if (fields.width) fields.width.value = String(round(placed.w))
+      return
+    }
+
+    if (isCrop) {
+      if (fields.x) fields.x.value = String(round(rect.x))
+      if (fields.y) fields.y.value = String(round(rect.y))
+      if (fields.width) fields.width.value = String(round(rect.w))
+      if (fields.height) fields.height.value = String(round(rect.h))
+      return
+    }
+
+    if (fields.regions) {
+      fields.regions.value = marks.length
+        ? JSON.stringify(
+            marks.map(function (mark) {
+              return {
+                page: mark.page,
+                x: round(mark.x),
+                y: round(mark.y),
+                width: round(mark.w),
+                height: round(mark.h),
+              }
+            })
+          )
+        : ''
+    }
   }
 
   function readFields() {
-    if (!fields.width || !fields.height) return
-    var x = parseFloat(fields.x && fields.x.value)
-    var y = parseFloat(fields.y && fields.y.value)
-    var w = parseFloat(fields.width.value)
-    var h = parseFloat(fields.height.value)
-    if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) return
-    rect = {
-      x: clamp(x, 0, 1),
-      y: clamp(y, 0, 1),
-      w: clamp(w, MIN_SIZE, 1),
-      h: clamp(h, MIN_SIZE, 1),
+    if (isPlace) {
+      var px = parseFloat(fields.x && fields.x.value)
+      var py = parseFloat(fields.y && fields.y.value)
+      var pw = parseFloat(fields.width && fields.width.value)
+      if (!isNaN(px)) placed.x = clamp(px, 0, 1)
+      if (!isNaN(py)) placed.y = clamp(py, 0, 1)
+      if (!isNaN(pw)) placed.w = clamp(pw, MIN_SIZE, 1)
+      rebuild()
+      return
     }
-    drawSelection()
+
+    if (isCrop) {
+      if (!fields.width || !fields.height) return
+      var x = parseFloat(fields.x && fields.x.value)
+      var y = parseFloat(fields.y && fields.y.value)
+      var w = parseFloat(fields.width.value)
+      var h = parseFloat(fields.height.value)
+      if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) return
+      rect = { x: clamp(x, 0, 1), y: clamp(y, 0, 1), w: clamp(w, MIN_SIZE, 1), h: clamp(h, MIN_SIZE, 1) }
+      layout()
+      return
+    }
+
+    if (!fields.regions) return
+    try {
+      var parsed = JSON.parse(fields.regions.value || '[]')
+      if (!Array.isArray(parsed)) return
+      marks = parsed
+        .filter(function (item) { return item && item.width > 0 && item.height > 0 })
+        .map(function (item) {
+          return {
+            page: Number(item.page) || 1,
+            x: clamp(Number(item.x) || 0, 0, 1),
+            y: clamp(Number(item.y) || 0, 0, 1),
+            w: clamp(Number(item.width) || 0, 0, 1),
+            h: clamp(Number(item.height) || 0, 0, 1),
+          }
+        })
+      chosen = null
+      rebuild()
+    } catch (error) {
+      // A value that will not parse is left alone; the server reports it.
+    }
   }
 
   function applyScope() {
-    var chosen = form.querySelector('[name="pdfScope"]:checked')
-    if (!fields.pages || !chosen) return
-    // 'All pages' is the tool's own default: an empty selection.
-    fields.pages.value = chosen.value === 'current' ? String(current) : ''
+    var picked = form.querySelector('[name="pdfScope"]:checked')
+    if (!fields.pages || !picked) return
+    fields.pages.value = picked.value === 'current' ? String(current) : ''
   }
 
-  // ---- the selection over the page ----------------------------------------
+  // ---- the overlay --------------------------------------------------------
 
-  function handleAt(name) {
-    var node = document.createElement('span')
-    node.className = 'pdf-handle pdf-handle-' + name
-    node.setAttribute('data-handle', name)
+  var HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
+
+  function addHandles(node) {
+    HANDLES.forEach(function (name) {
+      var handle = document.createElement('span')
+      handle.className = 'pdf-handle pdf-handle-' + name
+      handle.setAttribute('data-handle', name)
+      node.appendChild(handle)
+    })
+  }
+
+  function place(node, area) {
+    var box = overlay.getBoundingClientRect()
+    node.style.left = (area.x * box.width).toFixed(1) + 'px'
+    node.style.top = (area.y * box.height).toFixed(1) + 'px'
+    node.style.width = (area.w * box.width).toFixed(1) + 'px'
+    node.style.height = (area.h * box.height).toFixed(1) + 'px'
+  }
+
+  /** Is the mark tiled across the page, in which case its position is moot? */
+  function tiling() {
+    return Boolean(fields.tiled && fields.tiled.checked)
+  }
+
+  /** The words the mark shows, if it is made of words. */
+  function markText() {
+    if (fields.kind && fields.kind.value === 'image') return ''
+    return (fields.text && fields.text.value) || ''
+  }
+
+  function buildPlaced() {
+    var node = document.createElement('div')
+    node.className = 'pdf-placed'
+    node.setAttribute('data-pdf-placed', '')
+
+    if (signatureUrl) {
+      var image = document.createElement('img')
+      image.src = signatureUrl
+      image.alt = ''
+      node.appendChild(image)
+    } else {
+      var span = document.createElement('span')
+      span.className = 'pdf-placed-text'
+      span.textContent = markText() || 'Nothing to place yet'
+      if (!markText()) node.classList.add('is-empty')
+      node.appendChild(span)
+    }
+
+    // Only resizable when the tool has a width of its own to set. A watermark
+    // is sized by its type size instead, which belongs in the panel.
+    if (sizedByWidth) addHandles(node)
+    overlay.appendChild(node)
     return node
   }
 
-  function buildSelection() {
-    selection = document.createElement('div')
-    selection.className = 'pdf-selection'
-    selection.setAttribute('data-pdf-selection', '')
-    ;['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach(function (name) {
-      selection.appendChild(handleAt(name))
-    })
-    overlay.appendChild(selection)
+  /** Show the mark as it will come out: colour, fade and angle included. */
+  function stylePlaced(node) {
+    var box = overlay.getBoundingClientRect()
+    node.style.left = (placed.x * box.width).toFixed(1) + 'px'
+    node.style.top = (placed.y * box.height).toFixed(1) + 'px'
+    node.style.width = sizedByWidth ? (placed.w * box.width).toFixed(1) + 'px' : 'auto'
+
+    var span = node.querySelector('.pdf-placed-text')
+    if (span) {
+      if (sizedByWidth) {
+        // Set to span the width, which is what the server does with a name.
+        span.style.fontSize = fitFontSize(span.textContent, placed.w * box.width) + 'px'
+      } else {
+        // Points map to CSS pixels through the current zoom, so a type size
+        // previews at exactly the size it will print.
+        var points = parseFloat(fields.fontSize && fields.fontSize.value)
+        if (isNaN(points)) points = Math.max(18, (box.width / zoom) / 12)
+        span.style.fontSize = (points * zoom).toFixed(1) + 'px'
+      }
+      if (fields.color) span.style.color = fields.color.value
+    }
+
+    var opacity = parseFloat(fields.opacity && fields.opacity.value)
+    node.style.opacity = isNaN(opacity) ? '1' : String(clamp(opacity / 100, 0.05, 1))
+
+    var angle = parseFloat(fields.rotation && fields.rotation.value)
+    node.style.transform = isNaN(angle) ? 'none' : 'rotate(' + -angle + 'deg)'
+    node.style.transformOrigin = 'left bottom'
   }
 
-  function drawSelection() {
-    if (!selection) return
-    var box = overlay.getBoundingClientRect()
-    selection.style.left = (rect.x * box.width).toFixed(1) + 'px'
-    selection.style.top = (rect.y * box.height).toFixed(1) + 'px'
-    selection.style.width = (rect.w * box.width).toFixed(1) + 'px'
-    selection.style.height = (rect.h * box.height).toFixed(1) + 'px'
+  var ruler = null
+
+  /** The type size at which the given words span a width. */
+  function fitFontSize(text, targetWidth) {
+    if (!text || targetWidth <= 0) return 12
+    if (!ruler) ruler = document.createElement('canvas').getContext('2d')
+    var reference = 100
+    ruler.font = 'italic ' + reference + 'px ' + PLACED_FONT
+    var measured = ruler.measureText(text).width
+    if (!measured) return 12
+    return clamp((targetWidth / measured) * reference, 6, 400)
+  }
+
+  /** Rebuild the overlay's contents. Called when the set of areas changes. */
+  function rebuild() {
+    overlay.textContent = ''
+
+    if (isPlace) {
+      placedNode = null
+      if (tiling()) {
+        var note = document.createElement('p')
+        note.className = 'pdf-tiled-note'
+        note.textContent = 'Tiled across the whole page'
+        overlay.appendChild(note)
+        return
+      }
+      placedNode = buildPlaced()
+      layout()
+      return
+    }
+
+    if (isCrop) {
+      cropSelection = document.createElement('div')
+      cropSelection.className = 'pdf-selection'
+      cropSelection.setAttribute('data-pdf-selection', '')
+      addHandles(cropSelection)
+      overlay.appendChild(cropSelection)
+      layout()
+      return
+    }
+
+    marks.forEach(function (mark) {
+      mark.node = null
+      if (mark.page !== current) return
+
+      var node = document.createElement('div')
+      node.className = 'pdf-mark' + (mark === chosen ? ' is-chosen' : '')
+      node.setAttribute('data-pdf-mark', '')
+
+      if (mark === chosen) {
+        addHandles(node)
+        var drop = document.createElement('button')
+        drop.type = 'button'
+        drop.className = 'pdf-mark-drop'
+        drop.setAttribute('data-mark-drop', '')
+        drop.setAttribute('aria-label', 'Remove this area')
+        drop.textContent = '×'
+        node.appendChild(drop)
+      }
+
+      mark.node = node
+      overlay.appendChild(node)
+    })
+
+    layout()
+    renderMarksList()
+  }
+
+  /** Reposition what is already there, after a zoom or a window resize. */
+  function layout() {
+    if (isPlace) {
+      if (placedNode) stylePlaced(placedNode)
+      return
+    }
+
+    if (isCrop) {
+      if (cropSelection) place(cropSelection, rect)
+      return
+    }
+    marks.forEach(function (mark) {
+      if (mark.node) place(mark.node, mark)
+    })
+  }
+
+  function renderMarksList() {
+    if (!marksList || !marksPanel) return
+    marksPanel.hidden = marks.length === 0
+    marksList.textContent = ''
+
+    marks.forEach(function (mark, index) {
+      var item = document.createElement('li')
+      item.className = 'pdf-marks-item' + (mark === chosen ? ' is-chosen' : '')
+
+      var jump = document.createElement('button')
+      jump.type = 'button'
+      jump.className = 'pdf-marks-jump'
+      jump.textContent = 'Page ' + mark.page
+      jump.addEventListener('click', function () {
+        chosen = mark
+        if (mark.page !== current) {
+          current = mark.page
+          renderPage().then(rebuild)
+        } else {
+          rebuild()
+        }
+      })
+
+      var drop = document.createElement('button')
+      drop.type = 'button'
+      drop.className = 'pdf-marks-remove'
+      drop.setAttribute('aria-label', 'Remove area ' + (index + 1))
+      drop.textContent = '×'
+      drop.addEventListener('click', function () { remove(mark) })
+
+      item.appendChild(jump)
+      item.appendChild(drop)
+      marksList.appendChild(item)
+    })
+  }
+
+  function remove(mark) {
+    var at = marks.indexOf(mark)
+    if (at === -1) return
+    marks.splice(at, 1)
+    if (chosen === mark) chosen = null
+    writeFields()
+    rebuild()
   }
 
   function pointFrom(event) {
@@ -147,65 +419,152 @@
     }
   }
 
+  /**
+   * How much of the page the placed mark actually covers.
+   *
+   * Measured from the element, not from the width field: a watermark has no
+   * width of its own — its size comes from its type size — so the field says
+   * nothing useful and a mark clamped by it wanders off the page edge.
+   */
+  function placedSpan() {
+    if (!placedNode) return { w: 0, h: 0 }
+    var box = overlay.getBoundingClientRect()
+    if (!box.width || !box.height) return { w: 0, h: 0 }
+    return {
+      w: Math.min(1, placedNode.offsetWidth / box.width),
+      h: Math.min(1, placedNode.offsetHeight / box.height),
+    }
+  }
+
+  /** The area a gesture is acting on. */
+  function target() {
+    if (isPlace) return placed
+    return isCrop ? rect : chosen
+  }
+
   function onPointerDown(event) {
     if (event.button !== undefined && event.button !== 0) return
+
+    if (event.target.getAttribute && event.target.getAttribute('data-mark-drop') !== null) {
+      var owner = null
+      marks.forEach(function (mark) {
+        if (mark.node && mark.node.contains(event.target)) owner = mark
+      })
+      if (owner) remove(owner)
+      event.preventDefault()
+      return
+    }
+
     var handle = event.target.getAttribute && event.target.getAttribute('data-handle')
     var start = pointFrom(event)
 
-    if (handle) {
-      drag = { kind: 'resize', handle: handle, from: start, rect: Object.assign({}, rect) }
-    } else if (event.target === selection) {
-      drag = { kind: 'move', from: start, rect: Object.assign({}, rect) }
+    if (handle && target()) {
+      drag = { kind: 'resize', handle: handle, from: start, base: copy(target()) }
+    } else if (!isCrop && onMark(event.target)) {
+      chosen = onMark(event.target)
+      rebuild()
+      drag = { kind: 'move', from: start, base: copy(chosen) }
+    } else if (isCrop && event.target === cropSelection) {
+      drag = { kind: 'move', from: start, base: copy(rect) }
+    } else if (isPlace) {
+      // Nothing to create: there is one mark, and it is already on the page.
+      // A drag from the mark itself moves it; bare page is left alone.
+      if (placedNode && placedNode.contains(event.target)) {
+        drag = { kind: 'move', from: start, base: copy(placed) }
+      } else {
+        return
+      }
     } else {
-      // A drag on bare page starts a fresh area.
-      drag = { kind: 'create', from: start, rect: { x: start.x, y: start.y, w: 0, h: 0 } }
-      rect = drag.rect
-      drawSelection()
+      // A drag on bare page starts a new area.
+      if (isCrop) {
+        rect = { x: start.x, y: start.y, w: 0, h: 0 }
+      } else {
+        chosen = { page: current, x: start.x, y: start.y, w: 0, h: 0, node: null }
+        marks.push(chosen)
+        rebuild()
+      }
+      drag = { kind: 'create', from: start, base: copy(target()) }
     }
 
-    overlay.setPointerCapture && overlay.setPointerCapture(event.pointerId)
+    if (overlay.setPointerCapture) overlay.setPointerCapture(event.pointerId)
     event.preventDefault()
+  }
+
+  function copy(area) {
+    return area ? { x: area.x, y: area.y, w: area.w, h: area.h } : null
+  }
+
+  function onMark(node) {
+    var found = null
+    marks.forEach(function (mark) {
+      if (mark.node && (mark.node === node || mark.node.contains(node))) found = mark
+    })
+    return found
+  }
+
+  function shape(from, to) {
+    return {
+      x: Math.min(from.x, to.x),
+      y: Math.min(from.y, to.y),
+      w: Math.abs(to.x - from.x),
+      h: Math.abs(to.y - from.y),
+    }
+  }
+
+  function assign(area, next) {
+    area.x = next.x
+    area.y = next.y
+    area.w = next.w
+    area.h = next.h
   }
 
   function onPointerMove(event) {
     if (!drag) return
+    var area = target()
+    if (!area) return
     var at = pointFrom(event)
 
     if (drag.kind === 'create') {
-      rect = {
-        x: Math.min(drag.from.x, at.x),
-        y: Math.min(drag.from.y, at.y),
-        w: Math.abs(at.x - drag.from.x),
-        h: Math.abs(at.y - drag.from.y),
-      }
+      assign(area, shape(drag.from, at))
     } else if (drag.kind === 'move') {
-      var dx = at.x - drag.from.x
-      var dy = at.y - drag.from.y
-      rect = {
-        x: clamp(drag.rect.x + dx, 0, 1 - drag.rect.w),
-        y: clamp(drag.rect.y + dy, 0, 1 - drag.rect.h),
-        w: drag.rect.w,
-        h: drag.rect.h,
+      var measured = isPlace ? placedSpan() : null
+      var spanW = measured ? measured.w : drag.base.w || 0
+      var spanH = measured ? measured.h : drag.base.h || 0
+      assign(area, {
+        x: clamp(drag.base.x + (at.x - drag.from.x), 0, Math.max(0, 1 - spanW)),
+        y: clamp(drag.base.y + (at.y - drag.from.y), 0, Math.max(0, 1 - spanH)),
+        w: drag.base.w,
+        h: drag.base.h,
+      })
+    } else if (isPlace) {
+      var edge = drag.handle.indexOf('w') >= 0 ? 'left' : 'right'
+      var right = drag.base.x + drag.base.w
+      if (edge === 'left') {
+        var newLeft = Math.min(at.x, right - MIN_SIZE)
+        area.x = clamp(newLeft, 0, 1)
+        area.w = right - area.x
+      } else {
+        area.w = clamp(at.x - area.x, MIN_SIZE, 1 - area.x)
       }
     } else {
-      var base = drag.rect
-      var left = base.x
-      var top = base.y
-      var right = base.x + base.w
-      var bottom = base.y + base.h
+      var left = drag.base.x
+      var top = drag.base.y
+      var right = drag.base.x + drag.base.w
+      var bottom = drag.base.y + drag.base.h
       if (drag.handle.indexOf('w') >= 0) left = Math.min(at.x, right - MIN_SIZE)
       if (drag.handle.indexOf('e') >= 0) right = Math.max(at.x, left + MIN_SIZE)
       if (drag.handle.indexOf('n') >= 0) top = Math.min(at.y, bottom - MIN_SIZE)
       if (drag.handle.indexOf('s') >= 0) bottom = Math.max(at.y, top + MIN_SIZE)
-      rect = { x: left, y: top, w: right - left, h: bottom - top }
+      assign(area, { x: left, y: top, w: right - left, h: bottom - top })
     }
 
-    drawSelection()
+    layout()
     event.preventDefault()
   }
 
   function onPointerUp(event) {
     if (!drag) return
+    var area = target()
 
     /**
      * Finish from where the pointer was released, not only from the moves seen
@@ -213,23 +572,37 @@
      * move between them, and without this the gesture would end zero-sized and
      * be thrown away as a stray click.
      */
-    if (drag.kind === 'create' && event && event.clientX !== undefined) {
-      var end = pointFrom(event)
-      rect = {
-        x: Math.min(drag.from.x, end.x),
-        y: Math.min(drag.from.y, end.y),
-        w: Math.abs(end.x - drag.from.x),
-        h: Math.abs(end.y - drag.from.y),
+    if (drag.kind === 'create' && area && event && event.clientX !== undefined) {
+      assign(area, shape(drag.from, pointFrom(event)))
+    }
+
+    var wasCreate = drag.kind === 'create'
+    drag = null
+    if (!area) return
+
+    if (isPlace) {
+      area.w = clamp(area.w, MIN_SIZE, 1)
+      writeFields()
+      layout()
+      return
+    }
+
+    var tooSmall = area.w < MIN_SIZE || area.h < MIN_SIZE
+    if (tooSmall) {
+      // A stray click should not leave a sliver behind.
+      if (isCrop) {
+        rect = { x: 0, y: 0, w: 1, h: 1 }
+      } else if (wasCreate) {
+        remove(area)
+        return
       }
     }
 
-    drag = null
-    // A stray click should not leave a sliver of a page selected.
-    if (rect.w < MIN_SIZE || rect.h < MIN_SIZE) rect = { x: 0, y: 0, w: 1, h: 1 }
-    rect.w = Math.min(rect.w, 1 - rect.x)
-    rect.h = Math.min(rect.h, 1 - rect.y)
-    drawSelection()
+    area.w = Math.min(area.w, 1 - area.x)
+    area.h = Math.min(area.h, 1 - area.y)
     writeFields()
+    if (isBoxes) rebuild()
+    else layout()
   }
 
   // ---- rendering ----------------------------------------------------------
@@ -253,7 +626,6 @@
   function renderPage() {
     if (!doc) return Promise.resolve()
     return doc.getPage(current).then(function (page) {
-      var natural = page.getViewport({ scale: 1 })
       var viewport = page.getViewport({ scale: zoom })
       // Draw at the screen's real density, then size it in CSS pixels, so the
       // page is not soft on a retina display.
@@ -268,16 +640,12 @@
       context.fillStyle = '#ffffff'
       context.fillRect(0, 0, viewport.width, viewport.height)
 
-      return page
-        .render({ canvasContext: context, viewport: viewport })
-        .promise.then(function () {
-          page.cleanup()
-          if (pageLabel) pageLabel.textContent = current + ' / ' + pageCount
-          if (zoomLabel) zoomLabel.textContent = Math.round(zoom * 100) + '%'
-          drawSelection()
-          markRail()
-          return natural
-        })
+      return page.render({ canvasContext: context, viewport: viewport }).promise.then(function () {
+        page.cleanup()
+        if (pageLabel) pageLabel.textContent = current + ' / ' + pageCount
+        if (zoomLabel) zoomLabel.textContent = Math.round(zoom * 100) + '%'
+        markRail()
+      })
     })
   }
 
@@ -286,6 +654,12 @@
     Array.prototype.forEach.call(railList.querySelectorAll('[data-rail-page]'), function (node) {
       node.classList.toggle('is-current', Number(node.getAttribute('data-rail-page')) === current)
     })
+  }
+
+  function goTo(page) {
+    current = clamp(page, 1, pageCount)
+    applyScope()
+    return renderPage().then(rebuild)
   }
 
   function renderRail() {
@@ -317,11 +691,7 @@
                   var label = document.createElement('span')
                   label.textContent = String(page)
                   button.appendChild(label)
-                  button.addEventListener('click', function () {
-                    current = page
-                    applyScope()
-                    renderPage()
-                  })
+                  button.addEventListener('click', function () { goTo(page) })
                   item.appendChild(button)
                   railList.appendChild(item)
                   markRail()
@@ -348,21 +718,26 @@
         doc = opened
         pageCount = opened.numPages
         current = 1
+        // The scope radio is set from the start, so the field it drives has to
+        // be too: 'This page' showing while the value still said otherwise.
+        applyScope()
         if (nameLabel) nameLabel.textContent = file.name
         if (dropzone) dropzone.hidden = true
         if (viewer) viewer.hidden = false
         if (rail) rail.hidden = pageCount < 2
-        if (!selection) buildSelection()
 
         return doc.getPage(1).then(function (page) {
           zoom = fitZoom(page.getViewport({ scale: 1 }))
           page.cleanup()
-          return renderPage().then(renderRail)
+          return renderPage().then(function () {
+            rebuild()
+            return renderRail()
+          })
         })
       })
       .catch(function () {
         if (hint) {
-          hint.textContent = 'That document could not be opened here. The numbers below still work.'
+          hint.textContent = 'That document could not be opened here. The fields below still work.'
           hint.classList.add('is-error')
         }
         if (dropzone) dropzone.hidden = false
@@ -376,6 +751,15 @@
   overlay.addEventListener('pointermove', onPointerMove)
   overlay.addEventListener('pointerup', onPointerUp)
   overlay.addEventListener('pointercancel', onPointerUp)
+
+  document.addEventListener('keydown', function (event) {
+    if (!isBoxes || !chosen) return
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    var tag = document.activeElement && document.activeElement.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return
+    remove(chosen)
+    event.preventDefault()
+  })
 
   input.addEventListener('change', function () {
     var file = null
@@ -415,57 +799,78 @@
 
   var prev = form.querySelector('[data-pdf-prev]')
   var next = form.querySelector('[data-pdf-next]')
-  if (prev) prev.addEventListener('click', function () {
-    if (current > 1) { current--; applyScope(); renderPage() }
-  })
-  if (next) next.addEventListener('click', function () {
-    if (current < pageCount) { current++; applyScope(); renderPage() }
-  })
+  if (prev) prev.addEventListener('click', function () { goTo(current - 1) })
+  if (next) next.addEventListener('click', function () { goTo(current + 1) })
 
   var zoomIn = form.querySelector('[data-pdf-zoom-in]')
   var zoomOut = form.querySelector('[data-pdf-zoom-out]')
   var fit = form.querySelector('[data-pdf-fit]')
   if (zoomIn) zoomIn.addEventListener('click', function () {
     zoom = clamp(zoom * ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
-    renderPage()
+    renderPage().then(layout)
   })
   if (zoomOut) zoomOut.addEventListener('click', function () {
     zoom = clamp(zoom / ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
-    renderPage()
+    renderPage().then(layout)
   })
   if (fit) fit.addEventListener('click', function () {
     if (!doc) return
     doc.getPage(current).then(function (page) {
       zoom = fitZoom(page.getViewport({ scale: 1 }))
       page.cleanup()
-      renderPage()
+      renderPage().then(layout)
     })
   })
 
   var reset = form.querySelector('[data-pdf-reset]')
   if (reset) reset.addEventListener('click', function () {
-    rect = { x: 0, y: 0, w: 1, h: 1 }
-    var all = form.querySelector('[name="pdfScope"][value="all"]')
-    if (all) all.checked = true
-    applyScope()
+    if (isPlace) {
+      placed = { x: 0.6, y: 0.8, w: 0.28 }
+      writeFields()
+      rebuild()
+      return
+    }
+    if (isCrop) {
+      rect = { x: 0, y: 0, w: 1, h: 1 }
+      var all = form.querySelector('[name="pdfScope"][value="all"]')
+      if (all) all.checked = true
+      applyScope()
+    } else {
+      marks = []
+      chosen = null
+    }
     writeFields()
-    drawSelection()
+    rebuild()
   })
 
   Array.prototype.forEach.call(form.querySelectorAll('[name="pdfScope"]'), function (radio) {
     radio.addEventListener('change', applyScope)
   })
 
-  // Typed numbers and dragged ones are the same numbers.
-  ;['x', 'y', 'width', 'height'].forEach(function (name) {
+  // Typed values and dragged ones are the same values.
+  ;['x', 'y', 'width', 'height', 'regions'].forEach(function (name) {
     if (fields[name]) fields[name].addEventListener('change', readFields)
   })
 
-  window.addEventListener('resize', drawSelection)
-  writeFields()
-  if (mode !== 'crop' && hint) {
-    // The other interactions ride on this same viewer; until they land, the
-    // fields are still the way to set them.
-    hint.textContent = 'Use the numbers below for now.'
+  // The preview shows the mark as it will come out, so it follows the settings.
+  if (isPlace) {
+    ;['text', 'kind', 'fontSize', 'color', 'opacity', 'rotation', 'tiled'].forEach(function (name) {
+      if (!fields[name]) return
+      fields[name].addEventListener('input', rebuild)
+      fields[name].addEventListener('change', rebuild)
+    })
+
+    if (fields.signature) {
+      fields.signature.addEventListener('change', function () {
+        if (signatureUrl) URL.revokeObjectURL(signatureUrl)
+        var file = fields.signature.files && fields.signature.files[0]
+        signatureUrl = file ? URL.createObjectURL(file) : null
+        rebuild()
+      })
+    }
   }
+
+  window.addEventListener('resize', layout)
+  readFields()
+  writeFields()
 })()
