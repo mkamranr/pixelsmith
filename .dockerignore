@@ -16,3 +16,8 @@ tests/fixtures/tmp
 # The inference image fetches and verifies its own weights during the build,
 # so there is no reason to ship 180MB of them into the build context.
 assets/vendor/models
+
+# Generated during the image build. Copying the local copies in would bake
+# whatever happened to be on the build machine into the image instead.
+apps/api/public/brand
+apps/api/public/vendor

@@ -28,3 +28,6 @@ playwright-report/
 
 # Browser libraries copied out of node_modules at build time.
 apps/api/public/vendor/
+
+# Brand assets derived from assets/brand/ at build time.
+apps/api/public/brand/

@@ -137,7 +137,11 @@ a:hover { text-decoration: underline; }
 .topbar-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; gap: 16px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; }
 .brand:hover { text-decoration: none; }
-.brand-mark { width: 26px; height: 26px; color: var(--accent); flex: none; }
+/* The mark is wider than tall, so height leads and width follows. */
+.brand-mark { height: 28px; width: auto; flex: none; }
+/* Left, with the hero text it sits above — the hero is not centred. */
+.hero-mark { display: block; height: 104px; width: auto; margin: 0 0 20px; }
+@media (max-width: 640px) { .hero-mark { height: 76px; } }
 .brand-name { font-size: 1.0625rem; letter-spacing: -0.01em; }
 
 .nav { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -1281,7 +1285,8 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
 /* ---- PDF page thumbnails ---------------------------------------------- */
 /* Rendered in the browser by pdf.js, so a page range can be chosen by
    clicking rather than typed from memory. */
-.pdf-pages {
+.pdf-pages,
+.pdf-files {
   margin-top: 18px;
   padding: 16px;
   background: var(--surface);
@@ -1366,3 +1371,163 @@ code { font-family: var(--mono); font-size: 0.875em; background: var(--surface-2
   font-weight: 600;
   text-align: center;
 }
+
+/* ---- Merge: a card per document ---------------------------------------- */
+/* The add-more control sits at the stage's top right corner. */
+.pdf-files .pdf-pages-actions { margin-right: 52px; }
+
+.pdf-file-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+  gap: 14px;
+}
+
+.pdf-file {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: grab;
+}
+
+.pdf-file.is-dragging { opacity: 0.45; }
+.pdf-file.is-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pdf-file.is-unreadable .pdf-file-plate::after {
+  content: 'No preview';
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.pdf-file-plate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  margin-bottom: 8px;
+}
+
+.pdf-file-canvas {
+  max-width: 100%;
+  max-height: 150px;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(16, 18, 26, 0.2);
+}
+
+/* Revealed on hover, and always for keyboard users. */
+.pdf-file-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.pdf-file:hover .pdf-file-actions,
+.pdf-file:focus-within .pdf-file-actions { opacity: 1; }
+
+.pdf-file-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.pdf-file-action:hover { border-color: var(--border-strong); }
+
+.pdf-file-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  /* One line: a long filename must not push the grid about. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-file-meta { font-size: 0.6875rem; color: var(--text-muted); }
+
+/* ---- Split: from/to range rows ----------------------------------------- */
+/* The text field still posts the value; the rows are how it gets set. */
+input.is-driven { display: none; }
+
+.range-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+
+.range-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.range-row-label {
+  flex: 1 1 100%;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.range-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.range-number {
+  width: 4.5rem;
+  padding: 5px 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.range-drop {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.range-drop:hover { background: var(--surface); color: var(--text); border-color: var(--border); }
+.range-add { align-self: flex-start; }
+
+/* A page no range covers is not going anywhere, and should look like it. */
+.pdf-page-button.is-outside { opacity: 0.34; }
+
+/* A document workspace shows its pages above; the single-image plate would only
+   be a broken image pointing at a PDF. */
+.canvas-view.is-document .canvas-plate { display: none; }
+.canvas-view.is-document .canvas-caption { justify-content: center; }

@@ -2,10 +2,12 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { copyViews } from '../scripts/copy-views.mjs'
-import { copyPdfjs, PDFJS_FILES } from '../scripts/copy-vendor.mjs'
+import { copyPdfjs, PDFJS_ASSET_DIRS, PDFJS_FILES } from '../scripts/copy-vendor.mjs'
+import { BRAND_FILES, buildBrandAssets, findBands, keyOutPaper } from '../scripts/build-brand.mjs'
 
 const API_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
@@ -138,10 +140,108 @@ describe('vendored browser libraries', () => {
     for (const file of PDFJS_FILES) expect(present).toContain(file)
   })
 
+  it('ships the standard font data pdf.js needs to render text', async () => {
+    /**
+     * Without it pdf.js asks for the fonts on a default relative path, gets a
+     * 404 for every page that uses Helvetica or Times, and takes seconds per
+     * page instead of milliseconds. The server-side rasteriser has always
+     * pointed at these; the browser did not, and the page grid crawled.
+     */
+    const dest = join(API_ROOT, 'public', 'vendor', 'pdfjs')
+    await copyPdfjs(dest)
+    const present = await treeOf(dest)
+
+    for (const directory of PDFJS_ASSET_DIRS) {
+      const inside = present.filter((file) => file.startsWith(`${directory}/`))
+      expect(inside.length, `${directory} is empty`).toBeGreaterThan(5)
+    }
+  })
+
   it('runs the vendor copy as part of the api build', async () => {
     const pkg = JSON.parse(await readFile(join(API_ROOT, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>
     }
     expect(pkg.scripts.build).toMatch(/copy-vendor/)
+  })
+})
+
+/**
+ * The logo arrives as one flat PNG on white paper; everything the app serves is
+ * derived from it at build time. Derived rather than committed, so there is a
+ * single source of truth and no binary to keep in step by hand.
+ */
+describe('brand assets', () => {
+  const source = join(REPO_ROOT, 'assets', 'brand', 'pixelsmith-source.png')
+  const dest = join(API_ROOT, 'public', 'brand')
+
+  it('produces every file the pages ask for', async () => {
+    await buildBrandAssets(source, dest)
+    const present = await treeOf(dest)
+    for (const file of BRAND_FILES) expect(present).toContain(file)
+  })
+
+  it('keeps the white shapes inside the mark and drops the paper around it', async () => {
+    const keyed = await keyOutPaper(source)
+    const alphaAt = (x: number, y: number) => keyed.rgba[(y * keyed.width + x) * 4 + 3]
+
+    // The corners are paper.
+    expect(alphaAt(2, 2)).toBe(0)
+    expect(alphaAt(keyed.width - 3, keyed.height - 3)).toBe(0)
+
+    /**
+     * Somewhere inside the mark there is white that belongs to the artwork —
+     * the label on the red card. A plain "make white transparent" pass would
+     * have punched it out; flooding inwards from the edges cannot reach it.
+     */
+    const [mark] = findBands(keyed)
+    let enclosedWhite = 0
+    for (let y = mark!.top; y <= mark!.bottom; y++) {
+      for (let x = mark!.left; x <= mark!.right; x++) {
+        const i = (y * keyed.width + x) * 4
+        const isWhite = keyed.rgba[i]! > 245 && keyed.rgba[i + 1]! > 245 && keyed.rgba[i + 2]! > 245
+        if (isWhite && keyed.rgba[i + 3] === 255) enclosedWhite++
+      }
+    }
+    expect(enclosedWhite).toBeGreaterThan(500)
+  })
+
+  it('builds icons from the mark alone, with no wordmark dragged in', async () => {
+    /**
+     * Squaring the crop box instead of padding after the crop reached into the
+     * wordmark below, and every icon shipped with "pixelsmith" shrunk to a
+     * smear along the bottom. The mark is padded to a square, so the strip
+     * where that appeared has to be empty.
+     */
+    await buildBrandAssets(source, dest)
+    const icon = sharp(join(dest, 'icon-512.png'))
+    const { width, height } = await icon.metadata()
+    expect(width).toBe(height)
+
+    const strip = await icon
+      .clone()
+      .extract({ left: 0, top: Math.round(height! * 0.92), width: width!, height: Math.round(height! * 0.08) })
+      .toBuffer()
+    const alpha = (await sharp(strip).stats()).channels[3]
+    expect(alpha!.max).toBe(0)
+  })
+
+  it('gives both images the logo source their build step needs', async () => {
+    /**
+     * The build derives the icons from `assets/brand`, and both Dockerfiles run
+     * the workspace build — so both need that directory in the image. Without
+     * it the build failed with "Input file is missing" only once it reached
+     * Docker, which every local test had passed straight over.
+     */
+    for (const name of ['api.Dockerfile', 'runner.Dockerfile']) {
+      const text = await readFile(join(REPO_ROOT, 'infra', 'docker', name), 'utf8')
+      expect(text, `${name} must copy the brand source`).toMatch(/^COPY assets\/brand /m)
+    }
+  })
+
+  it('runs the brand build as part of the api build', async () => {
+    const pkg = JSON.parse(await readFile(join(API_ROOT, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }
+    expect(pkg.scripts.build).toMatch(/build-brand/)
   })
 })

@@ -1,5 +1,9 @@
 # Pixelsmith
 
+<p align="center">
+  <img src="assets/brand/pixelsmith-source.png" alt="Pixelsmith — image and PDF tools, all in one" width="420">
+</p>
+
 A self-hosted image and PDF workshop for networks with no internet access.
 Compress, resize, convert, crop, rotate, watermark, upscale, cut out backgrounds,
 redact faces, build memes, edit photos — and merge, split, sign, redact, compare,

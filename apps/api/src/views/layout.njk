@@ -7,7 +7,9 @@
 <title>{% block title %}Pixelsmith{% endblock %}</title>
 <meta name="description" content="Pixelsmith — a self-hosted image and PDF workshop. Your files never leave the building.">
 <link rel="stylesheet" href="/static/styles.css">
-<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/brand/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/static/brand/favicon-16.png" sizes="16x16" type="image/png">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -15,11 +17,12 @@
 <header class="topbar">
   <div class="wrap topbar-inner">
     <a class="brand" href="/">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-        <path d="M6 21 L14 13 L19 18 L26 11" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="10" cy="9" r="2.5" fill="currentColor"/>
-      </svg>
+      {#
+        The mark is the artwork; the name stays as text so it takes the theme
+        colour, scales with the type and reads properly aloud. alt is empty
+        because the word beside it already says what this is.
+      #}
+      <img class="brand-mark" src="/static/brand/mark.png" alt="" width="34" height="28" decoding="async">
       <span class="brand-name">Pixelsmith</span>
     </a>
 

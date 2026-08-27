@@ -20,6 +20,8 @@ COPY apps/api/package.json apps/api/
 COPY workers/runner/package.json workers/runner/
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.base.json tsconfig.json ./
+# The brand assets the api build derives its icons from.
+COPY assets/brand assets/brand
 COPY packages packages
 COPY apps apps
 COPY workers workers

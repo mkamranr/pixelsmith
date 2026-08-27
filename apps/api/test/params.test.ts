@@ -90,3 +90,24 @@ describe('coerceFormParams', () => {
     expect(coerceFormParams(tool, { width: 'wide' }).width).toBe('wide')
   })
 })
+
+/**
+ * The coercion reads the declared UI fields and nothing else, which is what
+ * keeps one list of fields instead of two. The catch is that a parameter living
+ * only in the zod schema is dropped in silence: merge's per-file rotation was
+ * set by the browser, posted, and never arrived.
+ */
+describe('fields a script sets rather than a person', () => {
+  it('carries a hidden field through to the tool', () => {
+    const tool = {
+      ui: { fields: [{ name: 'rotations', label: 'Rotations', kind: 'hidden' }] },
+    } as unknown as Parameters<typeof coerceFormParams>[0]
+
+    expect(coerceFormParams(tool, { rotations: '0,90,0' })).toEqual({ rotations: '0,90,0' })
+  })
+
+  it('has merge declare the rotation field, so it is not dropped', () => {
+    const declared = registry.get('merge-pdf').ui.fields.map((field) => field.name)
+    expect(declared).toContain('rotations')
+  })
+})

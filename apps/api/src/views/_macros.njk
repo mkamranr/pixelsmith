@@ -1,6 +1,10 @@
 {# Renders one declarative tool field. The tool declares these once and both
    this form and the API docs read from that same declaration. #}
 {% macro field(f) %}
+{% if f.kind == 'hidden' %}
+  {# No label and no chrome: a script writes this, not a person. #}
+  <input type="hidden" id="f-{{ f.name }}" name="{{ f.name }}" value="{{ f.default or '' }}">
+{% else %}
 <div class="field{% if f.kind == 'toggle' %} field-toggle{% endif %}" data-field="{{ f.name }}"
      {% if f.showWhen %}data-show-when-field="{{ f.showWhen.field }}"
      data-show-when-equals="{{ f.showWhen.equals | join(',') }}"{% endif %}>
@@ -56,6 +60,7 @@
 
   {% if f.help and f.kind != 'toggle' %}<p class="hint">{{ f.help }}</p>{% endif %}
 </div>
+{% endif %}
 {% endmacro %}
 
 {% macro bytes(n) %}

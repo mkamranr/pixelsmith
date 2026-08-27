@@ -12,6 +12,12 @@ export interface ToolField {
   name: string
   label: string
   kind: 'number' | 'text' | 'textarea' | 'select' | 'segmented' | 'toggle' | 'color' | 'range' | 'file'
+    /**
+     * Set by script rather than by hand — a workspace writing back what the
+     * user arranged. Declared all the same: the form coercion reads the
+     * declared fields, so anything missing here never reaches the tool.
+     */
+    | 'hidden'
   default?: unknown
   min?: number
   max?: number
@@ -33,6 +39,12 @@ export interface ToolUi {
    * that needs its own interactive page.
    */
   surface?: 'form' | 'canvas' | 'editor' | 'crop' | 'htmlshot'
+  /**
+   * Which PDF workspace suits the tool: a grid of one document's pages, or a
+   * card per document. Merging is about the order of files, so a grid of the
+   * first upload's pages would be the wrong thing to show.
+   */
+  pdfView?: 'pages' | 'files'
   /**
    * How the browser should preview this tool's effect on the uploaded
    * thumbnails before anything is submitted. Declared here so the preview logic

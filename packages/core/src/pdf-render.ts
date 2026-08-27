@@ -37,6 +37,16 @@ function standardFontDataUrl(): string {
 }
 
 /**
+ * Character maps for CID-encoded text, which is how a good many Arabic and CJK
+ * documents store their characters. Without these, extracting their text gives
+ * back the wrong characters rather than an error.
+ */
+function cMapUrl(): string {
+  const entry = require_.resolve('pdfjs-dist/package.json')
+  return `${join(dirname(entry), 'cmaps')}/`
+}
+
+/**
  * The one place an untrusted PDF is handed to pdf.js. Exported so text
  * extraction shares these settings rather than growing a second, subtly
  * different set of them.
@@ -51,6 +61,8 @@ export async function openDocument(path: string) {
       isEvalSupported: false,
       useSystemFonts: false,
       standardFontDataUrl: standardFontDataUrl(),
+      cMapUrl: cMapUrl(),
+      cMapPacked: true,
     }).promise
   } catch (err) {
     const message = err instanceof Error ? err.message : 'could not open document'

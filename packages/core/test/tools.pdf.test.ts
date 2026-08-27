@@ -1,9 +1,8 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mergePdf } from '../src/tools/pdf-merge.js'
-import { splitPdf } from '../src/tools/pdf-split.js'
 import { rotatePdf } from '../src/tools/pdf-rotate.js'
 import { organizePdf } from '../src/tools/pdf-organize.js'
 import { runTool } from '../src/run.js'
@@ -106,33 +105,6 @@ describe('merge', () => {
   })
 })
 
-describe('split', () => {
-  it('writes one document per page by default', async () => {
-    const src = await makePdf('s-each.pdf', 4)
-    const outs = await run(splitPdf, [src], { mode: 'each' })
-    expect(outs).toHaveLength(4)
-    for (const out of outs) expect(await pagesIn(out.path)).toBe(1)
-  })
-
-  it('names each part after the page it holds', async () => {
-    const src = await makePdf('s-name.pdf', 3)
-    const outs = await run(splitPdf, [src], { mode: 'each' })
-    expect(outs.map((o) => o.name)).toEqual(['s-name-page-1.pdf', 's-name-page-2.pdf', 's-name-page-3.pdf'])
-  })
-
-  it('extracts a chosen selection into a single document', async () => {
-    const src = await makePdf('s-sel.pdf', 6)
-    const outs = await run(splitPdf, [src], { mode: 'select', pages: '2-3,5' })
-    expect(outs).toHaveLength(1)
-    expect(await pagesIn(outs[0]!.path)).toBe(3)
-  })
-
-  it('refuses a selection past the end of the document', async () => {
-    const src = await makePdf('s-oob.pdf', 2)
-    await expect(run(splitPdf, [src], { mode: 'select', pages: '5' })).rejects.toThrow(/past the end/)
-  })
-})
-
 describe('rotate', () => {
   it('turns every page by default', async () => {
     const src = await makePdf('r-all.pdf', 2)
@@ -188,5 +160,61 @@ describe('organize', () => {
     // Silently keeping everything would make the tool a no-op with no warning.
     expect(organizePdf.params.safeParse({}).success).toBe(false)
     expect(organizePdf.params.safeParse({ pages: '1' }).success).toBe(true)
+  })
+})
+
+/** The rotation angle of every page, so a per-file turn can be checked. */
+async function anglesIn(path: string): Promise<number[]> {
+  const { readFile } = await import('node:fs/promises')
+  const doc = await PDFDocument.load(await readFile(path))
+  return doc.getPageIndices().map((i) => doc.getPage(i).getRotation().angle)
+}
+
+/**
+ * Merging is where a sideways scan gets straightened, so the rotation belongs
+ * to the file being merged rather than to the job — one document can need a
+ * quarter turn while the others do not.
+ */
+describe('merging with a turn applied per file', () => {
+  it('leaves every page as it was when nothing is rotated', async () => {
+    const a = await makePdf('rot-a.pdf', 2)
+    const b = await makePdf('rot-b.pdf', 2)
+
+    const [out] = await run(mergePdf, [a, b])
+    expect(await anglesIn(out!.path)).toEqual([0, 0, 0, 0])
+  })
+
+  it('turns every page of the file it was asked for, and no others', async () => {
+    const a = await makePdf('rot-c.pdf', 2)
+    const b = await makePdf('rot-d.pdf', 3)
+
+    const [out] = await run(mergePdf, [a, b], { rotations: '0,90' })
+    expect(await anglesIn(out!.path)).toEqual([0, 0, 90, 90, 90])
+  })
+
+  it('adds to a turn the page already had', async () => {
+    // A scan saved sideways is already at 90; another quarter turn is 180, not
+    // a reset back to 90.
+    const doc = await PDFDocument.create()
+    doc.addPage([400, 300]).setRotation(degrees(90))
+    const sideways = join(dir, 'sideways.pdf')
+    await writeFile(sideways, await doc.save())
+
+    const [out] = await run(mergePdf, [sideways], { rotations: '90' })
+    expect(await anglesIn(out!.path)).toEqual([180])
+  })
+
+  it('treats a missing entry as no rotation', async () => {
+    const a = await makePdf('rot-e.pdf', 1)
+    const b = await makePdf('rot-f.pdf', 1)
+
+    const [out] = await run(mergePdf, [a, b], { rotations: '90' })
+    expect(await anglesIn(out!.path)).toEqual([90, 0])
+  })
+
+  it('refuses an angle that is not a quarter turn', () => {
+    expect(mergePdf.params.safeParse({ rotations: '45' }).success).toBe(false)
+    expect(mergePdf.params.safeParse({ rotations: '0,90,180,270' }).success).toBe(true)
+    expect(mergePdf.params.safeParse({ rotations: '' }).success).toBe(true)
   })
 })

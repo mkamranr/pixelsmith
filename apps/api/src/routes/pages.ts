@@ -26,6 +26,10 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
     const tool = Object.assign(Object.create(Object.getPrototypeOf(base)), base, {
       acceptAttribute: acceptAttribute(base),
       acceptsDescription: describeAccepts(base),
+      /** A card per document rather than a grid of one document's pages. */
+      pdfFileView: base.family === 'pdf' && base.ui.pdfView === 'files',
+      /** Whether the from/to range rows have a field to write into. */
+      hasRangeField: base.ui.fields.some((field) => field.name === 'ranges'),
     })
     const q = req.query as { error?: string; from?: string }
 

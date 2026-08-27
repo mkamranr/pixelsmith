@@ -536,3 +536,65 @@ describe('the PDF workspace', () => {
     expect((await workspace('resize')).body).toContain('Choose images')
   })
 })
+
+describe('branding', () => {
+  it('shows the logo in the header, with the name still real text', async () => {
+    const res = await h.app.inject({ method: 'GET', url: '/' })
+
+    expect(res.body).toContain('/static/brand/mark.png')
+    // The wordmark stays HTML: it inherits the theme colour, scales with the
+    // type, and can be read by a screen reader.
+    expect(res.body).toContain('Pixelsmith</span>')
+  })
+
+  it('points the browser at the new icons and not the old placeholder', async () => {
+    const res = await h.app.inject({ method: 'GET', url: '/' })
+
+    expect(res.body).toContain('/static/brand/favicon-32.png')
+    expect(res.body).toContain('/static/brand/apple-touch-icon.png')
+    expect(res.body).not.toContain('favicon.svg')
+  })
+
+  it('leads the home page with the mark', async () => {
+    const res = await h.app.inject({ method: 'GET', url: '/' })
+    expect(res.body).toMatch(/class="hero-mark"/)
+  })
+})
+
+describe('the merge workspace', () => {
+  const workspace = async (tool: string) => {
+    const { cookie } = await signIn(h, `merge-${tool}@example.test`)
+    return h.app.inject({ method: 'GET', url: `/tools/${tool}`, headers: { cookie } })
+  }
+
+  it('shows a card per document, not a grid of one document\'s pages', async () => {
+    // Merging is about the order of files. Pages of the first upload would be
+    // the wrong thing to look at.
+    const res = await workspace('merge-pdf')
+
+    expect(res.body).toContain('data-pdf-files')
+    expect(res.body).not.toContain('data-pdf-pages')
+    expect(res.body).toContain('/static/pdffiles.js')
+  })
+
+  it('carries a field for the per-file rotation', async () => {
+    const res = await workspace('merge-pdf')
+    expect(res.body).toMatch(/name="rotations"/)
+  })
+
+  it('still gives single-document tools the page grid', async () => {
+    const res = await workspace('split-pdf')
+
+    expect(res.body).toContain('data-pdf-pages')
+    expect(res.body).not.toContain('data-pdf-files')
+  })
+
+  it('offers the range rows split actually needs', async () => {
+    const res = await workspace('split-pdf')
+
+    expect(res.body).toContain('data-range-rows')
+    expect(res.body).toContain('/static/pdfranges.js')
+    // The plain field stays, so the tool works with the script absent.
+    expect(res.body).toMatch(/name="ranges"/)
+  })
+})

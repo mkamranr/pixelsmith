@@ -40,7 +40,13 @@
     this.entries = []
     this.orientation = 'all'
 
-    if (!this.input) return
+    /**
+     * The grid is what this stage draws into. Its absence means the page has a
+     * workspace of its own — the canvas, or the PDF documents view — and two
+     * managers rewriting one file input do not coexist. It also threw on every
+     * upload while trying to hide a grid that was not there.
+     */
+    if (!this.input || !this.grid) return
 
     this.input.addEventListener('change', function () {
       self.add(self.input.files)

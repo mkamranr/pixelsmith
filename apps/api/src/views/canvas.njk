@@ -24,6 +24,7 @@
   <section class="stage canvas-stage" data-stage>
     {{ m.carried(sourceJob, sourceFiles) }}
 
+    {% if not tool.pdfFileView %}
     {# Navigation across the batch. Hidden until there is more than one file. #}
     <div class="canvas-nav" data-nav hidden>
       <button type="button" class="nav-step" data-step="-1" aria-label="Previous image">
@@ -36,6 +37,7 @@
       </button>
       <select class="nav-select" data-nav-select aria-label="Choose an image"></select>
     </div>
+    {% endif %}
 
     {# Add-more control, with the count of what is loaded. #}
     <button type="button" class="canvas-add" data-add-more hidden aria-label="Add more images">
@@ -55,7 +57,27 @@
       </label>
     </div>
 
-    {% if tool.family == 'pdf' %}
+    {% if tool.pdfFileView %}
+    {#
+      A card per document: its first page, its weight, and controls to turn,
+      drop or reorder it. What matters when merging is which document comes
+      first, so the pages of any one of them are beside the point here.
+    #}
+    <section class="pdf-files" data-pdf-files hidden
+             data-pdfjs="/static/vendor/pdfjs/pdf.min.mjs"
+             data-pdfjs-worker="/static/vendor/pdfjs/pdf.worker.min.mjs"
+             data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+             data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
+      <div class="pdf-pages-head">
+        <h2 class="pdf-pages-title">Documents</h2>
+        <p class="pdf-pages-hint" data-pdf-hint></p>
+        <div class="pdf-pages-actions">
+          <button type="button" class="btn btn-quiet btn-sm" data-sort-az>Sort A–Z</button>
+        </div>
+      </div>
+      <ol class="pdf-file-grid" data-pdf-file-grid></ol>
+    </section>
+    {% elif tool.family == 'pdf' %}
     {#
       Page thumbnails, rendered in the browser by pdf.js. A PDF has no single
       image to show, and every tool here that takes a page range is far easier
@@ -63,7 +85,9 @@
     #}
     <section class="pdf-pages" data-pdf-pages hidden
              data-pdfjs="/static/vendor/pdfjs/pdf.min.mjs"
-             data-pdfjs-worker="/static/vendor/pdfjs/pdf.worker.min.mjs">
+             data-pdfjs-worker="/static/vendor/pdfjs/pdf.worker.min.mjs"
+             data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+             data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
       <div class="pdf-pages-head">
         <h2 class="pdf-pages-title">Pages</h2>
         <p class="pdf-pages-hint" data-pdf-hint></p>
@@ -76,7 +100,10 @@
     </section>
     {% endif %}
 
-    <div class="canvas-view" data-view hidden>
+    {% if not tool.pdfFileView %}
+    <div class="canvas-view{% if tool.family == 'pdf' %} is-document{% endif %}" data-view hidden>
+      {# The plate is hidden for documents: an <img> pointing at a PDF renders
+         as a broken image, and the page grid above is the real preview. #}
       <div class="canvas-plate" data-plate>
         <img data-canvas-image alt="Preview">
         {# Overlays for the live preview are inserted here by script. #}
@@ -85,8 +112,9 @@
         <span class="canvas-name" data-canvas-name></span>
         <span class="thumb-sizes" data-canvas-sizes></span>
       </div>
-      <button type="button" class="canvas-remove" data-remove-current hidden>Remove this image</button>
+      <button type="button" class="canvas-remove" data-remove-current hidden>Remove this {% if tool.family == 'pdf' %}file{% else %}image{% endif %}</button>
     </div>
+    {% endif %}
   </section>
 
   <aside class="panel">
@@ -102,6 +130,12 @@
       </div>
     {% endif %}
 
+    {% if tool.hasRangeField %}
+      {# Rows of from/to, which write into the ranges field above. The field
+         stays usable on its own if this never gets wired up. #}
+      <div class="range-rows" data-range-rows hidden></div>
+    {% endif %}
+
     <div class="panel-footer">
       <button class="btn btn-primary btn-block btn-lg" type="submit">
         {{ tool.title }}
@@ -114,7 +148,12 @@
   </aside>
 </form>
 
+{% if tool.pdfFileView %}
+<script src="/static/pdffiles.js" defer></script>
+{% else %}
 <script src="/static/canvas.js" defer></script>
 {% if tool.family == 'pdf' %}<script src="/static/pdfpages.js" defer></script>{% endif %}
+{% if tool.hasRangeField %}<script src="/static/pdfranges.js" defer></script>{% endif %}
+{% endif %}
 {% endif %}
 {% endblock %}

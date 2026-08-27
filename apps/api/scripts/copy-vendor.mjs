@@ -14,11 +14,26 @@ const require_ = createRequire(import.meta.url)
 /** The minified browser build and its worker, which pdf.js needs separately. */
 export const PDFJS_FILES = ['pdf.min.mjs', 'pdf.worker.min.mjs']
 
+/**
+ * Data pdf.js fetches while rendering, rather than up front.
+ *
+ * `standard_fonts` holds the metrics and outlines for the 14 fonts a PDF is
+ * allowed to assume are present. Without them pdf.js requests each one from a
+ * default relative path, gets a 404, and spends seconds per page instead of
+ * milliseconds. `cmaps` does the same job for CID-encoded text, which is how
+ * plenty of Arabic and CJK documents store their characters.
+ */
+export const PDFJS_ASSET_DIRS = ['standard_fonts', 'cmaps']
+
 export async function copyPdfjs(destDir) {
-  const build = join(dirname(require_.resolve('pdfjs-dist/package.json')), 'build')
+  const root = dirname(require_.resolve('pdfjs-dist/package.json'))
   await mkdir(destDir, { recursive: true })
+
   for (const file of PDFJS_FILES) {
-    await cp(join(build, file), join(destDir, file), { force: true })
+    await cp(join(root, 'build', file), join(destDir, file), { force: true })
+  }
+  for (const directory of PDFJS_ASSET_DIRS) {
+    await cp(join(root, directory), join(destDir, directory), { recursive: true, force: true })
   }
 }
 

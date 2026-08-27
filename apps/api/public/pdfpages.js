@@ -76,6 +76,8 @@
     button.className = 'pdf-page-button'
     button.setAttribute('aria-pressed', 'false')
     button.setAttribute('aria-label', 'Page ' + pageNumber)
+    // A stable hook, so the range rows can mark which part each page lands in.
+    button.setAttribute('data-page', String(pageNumber))
     if (!pageField) button.disabled = true
 
     var order = document.createElement('span')
@@ -140,7 +142,15 @@
       .arrayBuffer()
       .then(function (bytes) {
         return loadPdfjs().then(function (pdfjs) {
-          return pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise
+          return pdfjs.getDocument({
+            data: new Uint8Array(bytes),
+            // Served from here, because there is no CDN to fall back on and
+            // because the default relative path 404s — which costs seconds a
+            // page rather than failing outright.
+            standardFontDataUrl: root.getAttribute('data-pdfjs-fonts'),
+            cMapUrl: root.getAttribute('data-pdfjs-cmaps'),
+            cMapPacked: true,
+          }).promise
         })
       })
       .then(function (doc) {
@@ -163,6 +173,9 @@
         return chain.then(function () {
           if (actions && pageField) actions.hidden = false
           sync(count)
+          // Tell anything else on the page how long the document is — the range
+          // rows prefill "to" from it.
+          document.dispatchEvent(new CustomEvent('pixelsmith:pages', { detail: count }))
           if (shown < count && hint) {
             hint.textContent =
               'Showing the first ' + shown + ' of ' + count + ' pages. Type a range to use the rest.'
