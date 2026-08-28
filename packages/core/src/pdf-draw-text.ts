@@ -1,3 +1,4 @@
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas'
 import { degrees, PDFDocument, PDFPage, rgb, StandardFonts } from 'pdf-lib'
 import sharp from 'sharp'
 import { escapeXml, FONT_STACK } from './text.js'
@@ -25,6 +26,12 @@ export interface PdfTextSpec {
   /** Components in 0..1, as pdf-lib expects. */
   colour?: { r: number; g: number; b: number }
   bold?: boolean
+  /**
+   * A registered font family to set the text in — a handwriting face for a
+   * signature, say. Such a face is not one of the PDF standard fonts, so text
+   * asking for one is always drawn rather than kept selectable.
+   */
+  family?: string
 }
 
 /**
@@ -41,15 +48,40 @@ export interface PdfTextSpec {
  * shapes and orders it properly, and embedded as an image. The trade is stated
  * on the mark: `selectable` says which happened.
  */
+/** One line of text in a registered family, on a transparent canvas. */
+function drawWithFace(
+  text: string,
+  family: string,
+  fontPx: number,
+  width: number,
+  height: number,
+  baseline: number,
+  fill: string,
+): Buffer {
+  const canvas = createCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  // Quoted: family names have spaces in them, and an unquoted one is parsed as
+  // a list of keywords and dropped.
+  ctx.font = `${fontPx}px "${family}"`
+  ctx.fillStyle = fill
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText(text, 0, baseline)
+  return canvas.toBuffer('image/png')
+}
+
 export async function preparePdfText(doc: PDFDocument, spec: PdfTextSpec): Promise<PdfTextMark> {
   const colour = spec.colour ?? { r: 0, g: 0, b: 0 }
   const font = await doc.embedFont(spec.bold ? StandardFonts.HelveticaBold : StandardFonts.Helvetica)
 
   // Measuring throws on exactly the text drawing would throw on, which makes it
   // a reliable and cheap way to ask "can the standard font handle this?".
+  // Skipped entirely when a particular family was asked for: Helvetica can
+  // encode a Latin name perfectly well, and using it anyway would quietly
+  // ignore the request.
   let textWidth: number | undefined
+  const wantsFace = spec.family !== undefined && GlobalFonts.has(spec.family)
   try {
-    textWidth = font.widthOfTextAtSize(spec.text, spec.size)
+    textWidth = wantsFace ? undefined : font.widthOfTextAtSize(spec.text, spec.size)
   } catch {
     textWidth = undefined
   }
@@ -81,14 +113,28 @@ export async function preparePdfText(doc: PDFDocument, spec: PdfTextSpec): Promi
   const baselinePx = fontPx * BASELINE_RATIO
   const fill = `rgb(${Math.round(colour.r * 255)},${Math.round(colour.g * 255)},${Math.round(colour.b * 255)})`
 
-  const svg = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">` +
-      `<text x="0" y="${baselinePx.toFixed(2)}" font-family="${FONT_STACK}"` +
-      ` font-size="${fontPx.toFixed(2)}"${spec.bold ? ' font-weight="bold"' : ''}` +
-      ` fill="${fill}">${escapeXml(spec.text)}</text></svg>`,
-  )
-
-  let png = await sharp(svg).png().toBuffer()
+  /**
+   * Two ways to get pixels, chosen by what was asked for rather than by taste.
+   *
+   * A named family goes through the canvas, because the face is registered in
+   * this process and fontconfig — which is what librsvg consults — may not know
+   * it and would silently substitute something else.
+   *
+   * Everything else goes through librsvg, which shapes and orders complex
+   * scripts properly. That is the whole reason this function exists.
+   */
+  let png = wantsFace
+    ? drawWithFace(spec.text, spec.family!, fontPx, canvasWidth, canvasHeight, baselinePx, fill)
+    : await sharp(
+        Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasWidth}" height="${canvasHeight}">` +
+            `<text x="0" y="${baselinePx.toFixed(2)}" font-family="${FONT_STACK}"` +
+            ` font-size="${fontPx.toFixed(2)}"${spec.bold ? ' font-weight="bold"' : ''}` +
+            ` fill="${fill}">${escapeXml(spec.text)}</text></svg>`,
+        ),
+      )
+        .png()
+        .toBuffer()
   let inkWidth = canvasWidth
   let inkHeight = canvasHeight
   let offsetTop = 0

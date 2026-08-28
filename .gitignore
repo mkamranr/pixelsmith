@@ -16,6 +16,10 @@ data/
 assets/vendor/**
 !assets/vendor/MANIFEST.md
 !assets/vendor/.gitkeep
+# The directory itself is kept so the image build can copy it whether or not
+# fetch-assets.sh has run; the faces inside are still fetched, never committed.
+!assets/vendor/fonts/
+!assets/vendor/fonts/.gitkeep
 
 # Offline bundle output
 infra/bundle/out/

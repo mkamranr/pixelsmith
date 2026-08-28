@@ -55,6 +55,13 @@ export interface ToolUi {
    */
   imageEdit?: 'boxes'
   /**
+   * An extra piece of interface the tool needs beyond its field list. The
+   * signature builder is a pad to sign on and a preview of the typed name in
+   * each hand — neither of which is a form field, and both of which are the
+   * difference between a tool you can use and one you can only fill in.
+   */
+  builder?: 'signature'
+  /**
    * Whether the edit starts out applying to the whole document or to the page
    * on screen. Not derivable from the interaction: signing and watermarking are
    * the same gesture with opposite intent — a signature belongs on one page, a

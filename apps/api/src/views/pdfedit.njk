@@ -134,6 +134,35 @@
     #}
     {% set placed = ['x', 'y', 'width', 'height', 'regions', 'pages'] %}
 
+    {% if tool.ui.builder == 'signature' %}
+    {# Three ways to produce a mark. The fields below stay authoritative and
+       usable on their own: this only fills them in. #}
+    <div class="sig-builder" data-signature
+         data-faces="{{ '/static/vendor/fonts/' }}">
+      <div class="sig-modes" role="tablist" aria-label="How to sign">
+        <button type="button" class="chip-btn is-active" data-sig-mode="draw" role="tab">Draw</button>
+        <button type="button" class="chip-btn" data-sig-mode="type" role="tab">Type</button>
+        <button type="button" class="chip-btn" data-sig-mode="upload" role="tab">Upload</button>
+      </div>
+
+      <div class="sig-pane" data-sig-pane="draw">
+        <canvas class="sig-pad" data-sig-pad width="640" height="240"
+                aria-label="Sign here with the mouse or a finger"></canvas>
+        <p class="hint" data-sig-pad-hint>Sign in the box. It goes on the page exactly as drawn.</p>
+        <button type="button" class="btn btn-quiet btn-sm" data-sig-clear>Clear</button>
+      </div>
+
+      <div class="sig-pane" data-sig-pane="type" hidden>
+        <ul class="sig-faces" data-sig-faces></ul>
+        <p class="hint">Choose a hand. The name comes from the field below.</p>
+      </div>
+
+      <div class="sig-pane" data-sig-pane="upload" hidden>
+        <p class="hint">A PNG with a transparent background sits best on the page.</p>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="panel-fields">
       {% for f in tool.ui.fields %}{% if not (f.name in placed) %}{{ m.field(f) }}{% endif %}{% endfor %}
     </div>
@@ -158,5 +187,6 @@
 </form>
 
 <script src="{{ asset('/static/pdfedit.js') }}" defer></script>
+{% if tool.ui.builder == 'signature' %}<script src="{{ asset('/static/signature.js') }}" defer></script>{% endif %}
 {% endif %}
 {% endblock %}

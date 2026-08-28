@@ -22,6 +22,10 @@ RUN npm ci --no-audit --no-fund
 COPY tsconfig.base.json tsconfig.json ./
 # The brand assets the api build derives its icons from.
 COPY assets/brand assets/brand
+# Handwriting faces for typed signatures. The directory is committed even when
+# empty, so a build works whether or not fetch-assets.sh has been run; a build
+# without them simply offers no faces.
+COPY assets/vendor/fonts assets/vendor/fonts
 COPY packages packages
 COPY apps apps
 COPY workers workers
@@ -64,6 +68,7 @@ COPY --from=build /build/node_modules ./node_modules
 COPY --from=build /build/packages ./packages
 COPY --from=build /build/apps ./apps
 COPY --from=build /build/workers ./workers
+COPY --from=build /build/assets/vendor/fonts ./assets/vendor/fonts
 COPY --from=build /build/package.json ./package.json
 
 RUN mkdir -p /data && chown -R node:node /data /app

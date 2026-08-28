@@ -21,6 +21,8 @@ const Schema = z.object({
   QPDF_PATH: z.string().optional(),
   SOFFICE_PATH: z.string().optional(),
   TESSERACT_PATH: z.string().optional(),
+  /** Handwriting faces for typed signatures. Absent is not an error. */
+  FONT_DIR: z.string().default('/app/assets/vendor/fonts'),
   ALLOWED_RENDER_HOSTS: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 })

@@ -1532,6 +1532,61 @@ input.is-driven { display: none; }
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
 
+/* ---- The signature builder --------------------------------------------- */
+/* The faces the workers draw with, served from this host. No external request
+   is made for them, and the preview therefore matches the result. */
+@font-face {
+  font-family: 'Great Vibes';
+  src: url('/static/vendor/fonts/GreatVibes-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Dancing Script';
+  src: url('/static/vendor/fonts/DancingScript-Variable.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Caveat';
+  src: url('/static/vendor/fonts/Caveat-Variable.ttf') format('truetype');
+  font-display: swap;
+}
+
+.sig-builder { margin-bottom: 18px; }
+.sig-modes { display: flex; gap: 6px; margin-bottom: 12px; }
+.sig-pane { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+.sig-pad {
+  width: 100%; height: auto;
+  /* Ruled like a signature line, so it is obvious what the box is for. */
+  background:
+    linear-gradient(to right, transparent 12px, var(--line, #e3e5e9) 12px, var(--line, #e3e5e9) calc(100% - 12px), transparent calc(100% - 12px))
+      0 78% / 100% 1px no-repeat,
+    var(--surface, #fff);
+  border: 1px dashed var(--line-strong, #cfd3da);
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.sig-faces { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; width: 100%; }
+.sig-face {
+  display: block; width: 100%;
+  padding: 10px 14px;
+  font-size: 30px; line-height: 1.25; text-align: left;
+  /* The name is the label, so it must not be clipped mid-flourish. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e5e9);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.sig-face:hover { border-color: var(--line-strong, #cfd3da); }
+.sig-face.is-active {
+  border-color: var(--accent, #c4551f);
+  box-shadow: inset 0 0 0 1px var(--accent, #c4551f);
+}
+
 /* ---- Results that are not pictures ------------------------------------- */
 /* A document tile: correct on its own, and replaced by a rendered first page
    when the browser can draw one. */

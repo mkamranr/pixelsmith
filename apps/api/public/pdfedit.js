@@ -222,10 +222,34 @@
   }
 
   /** The words the mark shows, if it is made of words. */
+  /**
+   * The value of a field that may be a radio group.
+   *
+   * `kind` is a segmented control, which is a set of radios sharing a name, so
+   * querySelector returns the FIRST one — whose value is 'image' whether or not
+   * it is the one chosen. Reading it directly meant a typed signature always
+   * looked like no signature, and the page said "Nothing to place yet" beside a
+   * perfectly good name.
+   */
+  function valueOf(name) {
+    var checked = form.querySelector('[name="' + name + '"]:checked')
+    if (checked) return checked.value
+    var single = form.querySelector('[name="' + name + '"]')
+    return single ? single.value : ''
+  }
+
   function markText() {
-    if (fields.kind && fields.kind.value === 'image') return ''
+    if (valueOf('kind') === 'image') return ''
     return (fields.text && fields.text.value) || ''
   }
+
+  /** Families for the handwriting faces, matching what the server draws with. */
+  var FACE_FAMILY = {
+    'great-vibes': "'Great Vibes', cursive",
+    'dancing-script': "'Dancing Script', cursive",
+    caveat: "'Caveat', cursive",
+  }
+  var INK_COLOUR = { black: '#1a1a1f', blue: '#17308c', red: '#992020', green: '#155c31' }
 
   function buildPlaced() {
     var node = document.createElement('div')
@@ -242,6 +266,12 @@
       span.className = 'pdf-placed-text'
       span.textContent = markText() || 'Nothing to place yet'
       if (!markText()) node.classList.add('is-empty')
+      // Shown in the hand and the ink that will actually be used, so what is
+      // being positioned looks like what ends up on the page.
+      var face = FACE_FAMILY[valueOf('face')]
+      if (markText() && face) span.style.fontFamily = face
+      var ink = INK_COLOUR[valueOf('colour')]
+      if (markText() && ink) span.style.color = ink
       node.appendChild(span)
     }
 

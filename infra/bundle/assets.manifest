@@ -15,3 +15,13 @@ models/u2netp.onnx|https://github.com/danielgatis/rembg/releases/download/v0.0.0
 models/face_detection_yunet.onnx|https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx|Apache-2.0 (OpenCV Zoo)|8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
 models/FSRCNN_x2.pb|https://github.com/Saafke/FSRCNN_Tensorflow/raw/master/models/FSRCNN_x2.pb|Apache-2.0 (FSRCNN_Tensorflow)|366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c
 models/FSRCNN_x4.pb|https://github.com/Saafke/FSRCNN_Tensorflow/raw/master/models/FSRCNN_x4.pb|Apache-2.0 (FSRCNN_Tensorflow)|5c68d18db561aed8ead4ffedf1b897ea615baaf60ebf6c35f8e641f8fa4a21bf
+
+# Handwriting faces for typed signatures. Pinned to a commit rather than a
+# branch, so the URL cannot change under the checksum. The licence text of
+# each ships beside it: nothing here is accounted for by reputation.
+fonts/GreatVibes-Regular.ttf|https://raw.githubusercontent.com/google/fonts/ade3d1533e06b2b1462ffcde8e08b129627ca360/ofl/greatvibes/GreatVibes-Regular.ttf|SIL OFL 1.1|8d509802186f1b51572531ecf313e8098f9a5bfdfaca93f0c9b34467f9982d15
+fonts/DancingScript-Variable.ttf|https://raw.githubusercontent.com/google/fonts/ade3d1533e06b2b1462ffcde8e08b129627ca360/ofl/dancingscript/DancingScript%5Bwght%5D.ttf|SIL OFL 1.1|21808625578fe8d8cd10cb684be546dca077b27cd03a53a2f1ec11dc743c924c
+fonts/Caveat-Variable.ttf|https://raw.githubusercontent.com/google/fonts/ade3d1533e06b2b1462ffcde8e08b129627ca360/ofl/caveat/Caveat%5Bwght%5D.ttf|SIL OFL 1.1|0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988
+fonts/OFL-GreatVibes.txt|https://raw.githubusercontent.com/google/fonts/ade3d1533e06b2b1462ffcde8e08b129627ca360/ofl/greatvibes/OFL.txt|SIL OFL 1.1|61093a21f5e63dedf54222b3c09997e54c0fe43e3851d21386e02ddcbc246d49
+fonts/OFL-DancingScript.txt|https://raw.githubusercontent.com/google/fonts/ade3d1533e06b2b1462ffcde8e08b129627ca360/ofl/dancingscript/OFL.txt|SIL OFL 1.1|6f090277c00af96651ce6dbcc38ff1591047a3bffef486e80b6a32e8276a8201
+fonts/OFL-Caveat.txt|https://raw.githubusercontent.com/google/fonts/ade3d1533e06b2b1462ffcde8e08b129627ca360/ofl/caveat/OFL.txt|SIL OFL 1.1|1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b

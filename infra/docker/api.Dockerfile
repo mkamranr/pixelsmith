@@ -28,6 +28,10 @@ RUN npm ci --no-audit --no-fund
 COPY tsconfig.base.json tsconfig.json ./
 # The brand assets the api build derives its icons from.
 COPY assets/brand assets/brand
+# The handwriting faces, so the build can copy them into the served directory
+# for the signature preview. Empty in a build where they were not fetched, in
+# which case the tool offers no faces rather than failing.
+COPY assets/vendor/fonts assets/vendor/fonts
 COPY packages packages
 COPY apps apps
 COPY workers workers

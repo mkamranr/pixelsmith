@@ -4,7 +4,7 @@
 // is no CDN to fetch it from on an air-gapped network, so the build copies it
 // out of node_modules into the directory the app serves. Copied rather than
 // committed, so it can never drift from the version in the lockfile.
-import { cp, mkdir } from 'node:fs/promises'
+import { access, cp, mkdir, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -37,7 +37,37 @@ export async function copyPdfjs(destDir) {
   }
 }
 
+/**
+ * Handwriting faces, so the browser can show what a typed signature will look
+ * like in each before it is chosen. The same files the workers draw with, so the
+ * preview and the result agree.
+ *
+ * Fetched by infra/bundle/fetch-assets.sh against pinned checksums, and absent
+ * from a checkout that has not run it — in which case there is nothing to copy
+ * and the tool simply offers no faces.
+ */
+export async function copyHandwritingFaces(sourceDir, destDir) {
+  try {
+    await access(sourceDir)
+  } catch {
+    return []
+  }
+  const files = (await readdir(sourceDir)).filter((f) => f.endsWith('.ttf'))
+  if (!files.length) return []
+
+  await mkdir(destDir, { recursive: true })
+  for (const file of files) {
+    await cp(join(sourceDir, file), join(destDir, file), { force: true })
+  }
+  return files
+}
+
 const invokedDirectly = process.argv[1] === fileURLToPath(import.meta.url)
 if (invokedDirectly) {
   await copyPdfjs(fileURLToPath(new URL('../public/vendor/pdfjs', import.meta.url)))
+  const faces = await copyHandwritingFaces(
+    fileURLToPath(new URL('../../../assets/vendor/fonts', import.meta.url)),
+    fileURLToPath(new URL('../public/vendor/fonts', import.meta.url)),
+  )
+  if (faces.length) console.log(`  copied ${faces.length} handwriting face(s)`)
 }

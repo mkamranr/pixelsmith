@@ -1,4 +1,4 @@
-import { refreshRunnerLlmStatus, registry } from '@pixelsmith/core'
+import { registerHandwritingFaces, refreshRunnerLlmStatus, registry } from '@pixelsmith/core'
 import { jobsRepo, openDatabase } from '@pixelsmith/db'
 import { createProcessor, jobStorage, parseQueueNames, startWorker } from '@pixelsmith/jobs'
 import { pino } from 'pino'
@@ -22,6 +22,14 @@ async function main() {
   const db = openDatabase(config.databasePath)
   const jobs = jobsRepo(db.db, { retentionMs: config.retentionMs })
   const storage = jobStorage(config.dataDir)
+
+  /**
+   * Registered once, in-process, rather than installed into the image:
+   * fontconfig is not configured identically everywhere this runs, and a font
+   * that is silently substituted looks exactly like one that was never asked
+   * for. Logged so an operator can see which faces a signature can use.
+   */
+  const faces = registerHandwritingFaces(config.FONT_DIR)
 
   const processor = createProcessor({
     jobs,
@@ -69,7 +77,12 @@ async function main() {
   })
 
   logger.info(
-    { queues: queueNames, concurrency: config.CONCURRENCY, dataDir: config.dataDir },
+    {
+      queues: queueNames,
+      concurrency: config.CONCURRENCY,
+      dataDir: config.dataDir,
+      handwritingFaces: faces.length,
+    },
     'Pixelsmith runner started',
   )
 

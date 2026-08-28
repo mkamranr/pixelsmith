@@ -107,7 +107,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **OCR** | Makes a scan searchable — English, Arabic, or both |
 | **Page numbers** | Numbered where you want them, in the format you want |
 | **Watermark** | Text across one page or tiled over all of them |
-| **Sign** | A scanned signature or a typed name, placed where you drag it |
+| **Sign** | Draw a signature, set your name in one of three hands, or place a scanned one |
 | **Redact** | Blacks out text and removes it from the file, not just covers it |
 | **Compare** | Two versions, with a report of what changed on which page |
 | **Protect** | AES-256 encryption, with printing and copying controlled |
@@ -320,7 +320,9 @@ Apache-2.0: U²-Net (background removal), YuNet (face detection) and FSRCNN
 (upscaling). Copyleft and non-commercial weights are deliberately excluded — in
 particular the widely used AGPL face detectors, which would have implicated the
 whole deployment. Rendered text uses DejaVu from the distribution, not a
-proprietary typeface.
+proprietary typeface; the three handwriting faces offered for a typed signature
+— Great Vibes, Dancing Script and Caveat — are SIL OFL 1.1, fetched against
+pinned checksums with their licence text beside them.
 
 This is an independent implementation, not affiliated with or derived from any
 existing product.

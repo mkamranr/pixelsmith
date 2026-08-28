@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { BadInputError } from '../errors.js'
 import { parsePageRanges } from '../pages.js'
 import { loadPdf, PDF_MIME } from '../pdf.js'
+import { HANDWRITING_FACES, handwritingFace } from '../fonts.js'
 import { preparePdfText } from '../pdf-draw-text.js'
 import { stripControlChars } from '../text.js'
 import { uniqueName } from '../naming.js'
@@ -21,11 +22,27 @@ const REFERENCE_SIZE = 100
 const CAPTION_SIZE = 9
 const CAPTION_GAP = 4
 
+/** Ink colours, in the 0..1 components pdf-lib works in. */
+const INK: Record<string, { r: number; g: number; b: number }> = {
+  black: { r: 0.1, g: 0.1, b: 0.12 },
+  blue: { r: 0.09, g: 0.19, b: 0.55 },
+  red: { r: 0.6, g: 0.11, b: 0.11 },
+  green: { r: 0.08, g: 0.36, b: 0.19 },
+}
+
 export const SignPdfParams = z
   .object({
     kind: z.enum(['image', 'text']).default('image'),
     /** The name to write, when signing without a scanned image. */
     text: z.string().trim().max(120).optional(),
+    /**
+     * Which handwriting face to set the name in. Absent means the plain face,
+     * which is what this did before there were any — a signature in Helvetica,
+     * which does not read as a signature.
+     */
+    face: z.enum(Object.keys(HANDWRITING_FACES) as [string, ...string[]]).optional(),
+    /** Ink colour for a typed name. A drawn one carries its own. */
+    colour: z.enum(['black', 'blue', 'red', 'green']).default('black'),
     /** Small print under the mark — a printed name, a date, a role. */
     caption: z.string().trim().max(120).optional(),
     /** Blank means the last page, which is where a signature belongs. */
@@ -60,11 +77,12 @@ export const signPdf: Tool<SignPdfParams> = {
     icon: 'pen-line',
     surface: 'pdfedit',
     pdfEdit: 'place',
+    builder: 'signature',
     // A signature goes on one page, and by default the one being looked at.
     pdfScope: 'current',
     preview: 'none',
     blurb:
-      'Place a signature on a document — a scanned image of your own, or your name set in type. The rest of the document is left exactly as it was.',
+      'Sign a document: draw your signature, set your name in one of three hands, or place a scanned one. Drag it where it belongs. The rest of the document is left exactly as it was.',
     fields: [
       { name: 'kind', label: 'Signature', kind: 'segmented', default: 'image',
         options: [
@@ -76,6 +94,17 @@ export const signPdf: Tool<SignPdfParams> = {
         help: 'A PNG with a transparent background sits best on the page.' },
       { name: 'text', label: 'Name', kind: 'text',
         showWhen: { field: 'kind', equals: ['text'] } },
+      { name: 'face', label: 'Hand', kind: 'segmented', default: 'great-vibes',
+        showWhen: { field: 'kind', equals: ['text'] },
+        options: Object.entries(HANDWRITING_FACES).map(([value, f]) => ({ value, label: f.label })) },
+      { name: 'colour', label: 'Ink', kind: 'segmented', default: 'black',
+        showWhen: { field: 'kind', equals: ['text'] },
+        options: [
+          { value: 'black', label: 'Black' },
+          { value: 'blue', label: 'Blue' },
+          { value: 'red', label: 'Red' },
+          { value: 'green', label: 'Green' },
+        ] },
       { name: 'caption', label: 'Caption', kind: 'text',
         help: 'Optional small print under the signature, such as a printed name or date.' },
       { name: 'pages', label: 'Pages', kind: 'text',
@@ -141,12 +170,17 @@ export const signPdf: Tool<SignPdfParams> = {
            * Measuring cannot use font metrics directly, because a name in
            * Arabic never reaches the standard font at all.
            */
-          const reference = await preparePdfText(doc, { text, size: REFERENCE_SIZE })
+          const face = handwritingFace(params.face)
+          const inFace = {
+            ...(face ? { family: face.family } : {}),
+            colour: INK[params.colour] ?? INK.black!,
+          }
+          const reference = await preparePdfText(doc, { text, size: REFERENCE_SIZE, ...inFace })
           const size = Math.min(
             MAX_SIZE,
             Math.max(MIN_SIZE, (markWidth / reference.width) * REFERENCE_SIZE),
           )
-          const mark = await preparePdfText(doc, { text, size })
+          const mark = await preparePdfText(doc, { text, size, ...inFace })
           markHeight = mark.height
           mark.draw(page, { x: left, y: pageHeight - fromTop - markHeight })
         }

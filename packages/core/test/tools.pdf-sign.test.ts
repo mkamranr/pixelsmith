@@ -1,11 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { signPdf } from '../src/tools/pdf-sign.js'
 import { extractPdfText } from '../src/pdf-text.js'
 import { renderPdfPage } from '../src/pdf-render.js'
+import { registerHandwritingFaces } from '../src/fonts.js'
 import { runTool } from '../src/run.js'
 import * as fx from './helpers/fixtures.js'
 
@@ -37,6 +39,8 @@ beforeAll(async () => {
   )
 })
 afterAll(() => rm(dir, { recursive: true, force: true }))
+
+const FONT_DIR = fileURLToPath(new URL('../../../assets/vendor/fonts', import.meta.url))
 
 const run = (params: unknown, assets: Record<string, string> = {}) =>
   runTool(signPdf, {
@@ -109,6 +113,79 @@ describe('sign a PDF', () => {
     const stats = await sharp(png).stats()
     // Blank paper renders as exactly 255; anything less is the signature.
     expect(Math.min(...stats.channels.map((c) => c.min))).toBeLessThan(250)
+  })
+
+  /**
+   * Compared as images rather than by measurement: the tool scales any mark to
+   * the requested width, so width says nothing about which face drew it. The
+   * same face twice gives 0, which is the control that makes the rest mean
+   * something.
+   */
+  const pageDiffers = async (a: string, b: string) => {
+    const [one, two] = await Promise.all([
+      renderPdfPage(a, 2, { scale: 1 }),
+      renderPdfPage(b, 2, { scale: 1 }),
+    ])
+    const diff = await sharp(one).composite([{ input: two, blend: 'difference' }]).png().toBuffer()
+    return (await sharp(diff).stats()).channels[0]!.mean
+  }
+
+  it('sets a typed name in the handwriting face it was given', async () => {
+    // A signature set in Helvetica does not read as a signature, which is what
+    // the typed option produced. A silently ignored font looks exactly like no
+    // font at all, so this checks the page actually changed.
+    registerHandwritingFaces(FONT_DIR)
+    const plain = await run({ kind: 'text', text: 'Kamran Rafi' })
+    const script = await run({ kind: 'text', text: 'Kamran Rafi', face: 'great-vibes' })
+
+    expect(await pageDiffers(plain[0]!.path, script[0]!.path)).toBeGreaterThan(0.2)
+  })
+
+  it('draws a different hand for a different face', async () => {
+    registerHandwritingFaces(FONT_DIR)
+    const formal = await run({ kind: 'text', text: 'Kamran Rafi', face: 'great-vibes' })
+    const flowing = await run({ kind: 'text', text: 'Kamran Rafi', face: 'dancing-script' })
+
+    expect(await pageDiffers(formal[0]!.path, flowing[0]!.path)).toBeGreaterThan(0.2)
+  })
+
+  it('draws the same hand twice the same way', async () => {
+    registerHandwritingFaces(FONT_DIR)
+    const once = await run({ kind: 'text', text: 'Kamran Rafi', face: 'caveat' })
+    const again = await run({ kind: 'text', text: 'Kamran Rafi', face: 'caveat' })
+
+    expect(await pageDiffers(once[0]!.path, again[0]!.path)).toBeLessThan(0.01)
+  })
+
+  it('signs in the colour it was asked for', async () => {
+    // Blue ink is what most people reach for on paper, and a signature that
+    // matches the rest of the form matters to whoever files it.
+    registerHandwritingFaces(FONT_DIR)
+    const black = await run({ kind: 'text', text: 'Kamran Rafi', face: 'caveat' })
+    const blue = await run({ kind: 'text', text: 'Kamran Rafi', face: 'caveat', colour: 'blue' })
+
+    const bluest = async (path: string) => {
+      const png = await renderPdfPage(path, 2, { scale: 1 })
+      const { channels } = await sharp(png).stats()
+      // Blue ink leaves the blue channel brighter than the red one; black ink
+      // takes all three down together.
+      return channels[2]!.mean - channels[0]!.mean
+    }
+
+    expect(await bluest(blue[0]!.path)).toBeGreaterThan(await bluest(black[0]!.path))
+  })
+
+  it('refuses a colour it does not have', () => {
+    expect(signPdf.params.safeParse({ kind: 'text', text: 'A', colour: 'chartreuse' }).success).toBe(false)
+  })
+
+  it('refuses a face it does not have, rather than signing in the wrong hand', async () => {
+    expect(signPdf.params.safeParse({ kind: 'text', text: 'A. Nadir', face: 'comic-sans' }).success).toBe(false)
+  })
+
+  it('still signs when no face is asked for', async () => {
+    const outs = await run({ kind: 'text', text: 'A. Nadir' })
+    expect(outs).toHaveLength(1)
   })
 
   it('can add a caption under the signature, for a name or a date', async () => {
