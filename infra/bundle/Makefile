@@ -51,22 +51,25 @@ bundle: images
 	@du -sh $(OUT)
 	@echo "Copy that directory to the isolated server and run ./install.sh"
 
-# Proves the stack runs with no route to the outside world. If any dependency
-# tries to phone home, it fails here rather than on the isolated server.
+# Proves the stack runs and that the processing tier has no route out. The
+# check itself lives in egress-check.sh, so an operator can run it on the
+# isolated server without make, and so its logic is readable rather than
+# escaped three times over.
+PORT ?= 8080
+TARGET ?= 1.1.1.1
+
 verify:
-	@echo "==> Starting with egress blocked"
+	@echo "==> Starting the stack"
 	cd $(ROOT) && \
-	  PIXELSMITH_VERSION=$(VERSION) COOKIE_SECRET=$$(openssl rand -hex 32) \
+	  PIXELSMITH_VERSION=$(VERSION) COOKIE_SECRET=$$(openssl rand -hex 32) PUBLISH_PORT=$(PORT) \
 	  docker compose -f $(COMPOSE) up -d
 	@echo "==> Waiting for health"
 	@for i in $$(seq 40); do \
-	  if curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1; then echo "    healthy"; break; fi; \
+	  if curl -fsS http://127.0.0.1:$(PORT)/healthz >/dev/null 2>&1; then break; fi; \
 	  sleep 3; \
 	done
-	@curl -fsS http://127.0.0.1:8080/healthz && echo ""
-	@echo "==> Confirming the internal network has no route out"
-	@docker run --rm --network pixelsmith_internal alpine:3.20 \
-	   sh -c 'timeout 5 wget -q -O- http://1.1.1.1 2>&1; test $$? -ne 0 && echo "    no egress from internal network (correct)"'
+	@curl -fsS http://127.0.0.1:$(PORT)/healthz && echo ""
+	cd $(ROOT) && ./infra/bundle/egress-check.sh $(TARGET)
 	cd $(ROOT) && docker compose -f $(COMPOSE) down
 
 clean:

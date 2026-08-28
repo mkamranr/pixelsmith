@@ -20,6 +20,7 @@ say "Pixelsmith $(cat VERSION 2>/dev/null || echo '?') — offline install"
 command -v docker >/dev/null 2>&1 || die "docker is not installed or not on PATH"
 docker compose version >/dev/null 2>&1 || die "the docker compose plugin is required (v2)"
 docker info >/dev/null 2>&1 || die "cannot talk to the Docker daemon — is it running, and are you in the docker group?"
+command -v curl >/dev/null 2>&1 || die "curl is needed to check the server came up"
 
 # ---- 2. integrity ----
 if [[ -f SHA256SUMS ]]; then
@@ -86,9 +87,24 @@ if ! curl -fsS "http://${ADDR}:${PORT}/healthz" >/dev/null 2>&1; then
 fi
 
 say "Pixelsmith is running"
-note "URL:  http://${ADDR}:${PORT}"
+# 0.0.0.0 is an address to listen on, not one to visit.
+VISIT="${ADDR}"; [[ "$VISIT" == "0.0.0.0" ]] && VISIT="localhost"
+note "URL:  http://${VISIT}:${PORT}"
 printf '\n'
-note "The first administrator password was printed once to the API log."
-note "Retrieve it with:"
-printf '\n    docker compose -f docker-compose.yml logs api | grep -i "generated password"\n\n'
-note "Sign in and change it immediately. See RUNBOOK.md for day-to-day operation."
+
+MODE="$(grep -E '^AUTH_MODE=' .env | cut -d= -f2 || true)"; MODE="${MODE:-open}"
+if [[ "$MODE" == "accounts" ]]; then
+  note "This deployment requires sign-in. The first administrator's password was"
+  note "printed once to the API log. Retrieve it with:"
+  printf '\n    docker compose -f docker-compose.yml logs api | grep -i "generated password"\n\n'
+  note "Sign in and change it immediately."
+else
+  note "Anyone who can reach that address can use it: there are no accounts, which"
+  note "is the default. Reaching the page is the access control, so put it on a"
+  note "network where that is what you want."
+  printf '\n'
+  note "To require sign-in instead, set AUTH_MODE=accounts in .env and re-run this"
+  note "script. An administrator is created and its password printed once."
+fi
+printf '\n'
+note "See RUNBOOK.md for day-to-day operation."

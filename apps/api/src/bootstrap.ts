@@ -11,6 +11,20 @@ import type { AppLogger } from './context.js'
  * once — never a fixed default, which would ship the same password to everyone.
  */
 export async function bootstrapFirstAdmin(ctx: AppContext, logger: AppLogger): Promise<void> {
+  /**
+   * With no accounts there is no administrator to be. The sign-in pages are
+   * never registered in that mode, so the account could not be used for
+   * anything — and creating one anyway printed a password into the log of every
+   * open deployment for an account nobody could reach.
+   */
+  if (ctx.config.isOpenAccess) {
+    logger.info(
+      {},
+      'no accounts on this deployment, so no administrator was created — set AUTH_MODE=accounts to require sign-in',
+    )
+    return
+  }
+
   if ((await ctx.users.countUsers()) > 0) return
 
   const email = ctx.config.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@pixelsmith.local'
