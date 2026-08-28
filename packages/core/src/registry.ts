@@ -62,6 +62,12 @@ export interface ToolUi {
    */
   builder?: 'signature'
   /**
+   * How the results page should present what came back, when a grid of files is
+   * the wrong answer. `compare` lays the two documents side by side with the
+   * changes marked on them, which is the point of having compared them.
+   */
+  result?: 'compare'
+  /**
    * Whether the edit starts out applying to the whole document or to the page
    * on screen. Not derivable from the interaction: signing and watermarking are
    * the same gesture with opposite intent — a signature belongs on one page, a

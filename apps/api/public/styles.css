@@ -1532,6 +1532,82 @@ input.is-driven { display: none; }
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
 
+/* ---- Two documents side by side ---------------------------------------- */
+/* Three columns: the two documents and the list of changes. Each document
+   scrolls in its own column so the page itself does not grow to the length of
+   the longer one. */
+.cmp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) clamp(240px, 22vw, 320px);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .cmp { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cmp-side { min-width: 0; }
+.cmp-name { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.cmp-scroll {
+  max-height: 70vh; overflow: auto;
+  padding: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  background: var(--surface-sunken, #f4f5f7);
+  border: 1px solid var(--line, #e3e5e9);
+  border-radius: 8px;
+}
+
+.cmp-page {
+  position: relative; line-height: 0;
+  /* Never squeezed: this is a flex column with a bounded height, and the
+     default shrink would compress the pages to fit instead of letting the
+     column scroll. A page is the size it is. */
+  flex: 0 0 auto;
+  box-shadow: 0 2px 10px rgba(10, 12, 18, 0.14);
+}
+.cmp-page canvas { display: block; max-width: 100%; height: auto; }
+.cmp-marks { position: absolute; inset: 0; pointer-events: none; }
+.cmp-page-number {
+  position: absolute; right: 4px; bottom: 4px;
+  padding: 1px 6px;
+  font-size: 10px; line-height: 1.6; color: #fff;
+  background: rgba(16, 18, 24, 0.6);
+  border-radius: 999px;
+}
+
+/* Translucent, so the words underneath stay readable — the point is to show
+   what changed, not to cover it. */
+.cmp-mark { position: absolute; border-radius: 2px; }
+.cmp-mark.is-removed { background: rgba(200, 40, 40, 0.22); box-shadow: inset 0 0 0 1px rgba(200, 40, 40, 0.5); }
+.cmp-mark.is-added { background: rgba(28, 150, 70, 0.22); box-shadow: inset 0 0 0 1px rgba(28, 150, 70, 0.5); }
+.cmp-mark.is-lit { background: rgba(255, 196, 0, 0.4); box-shadow: inset 0 0 0 2px rgba(190, 130, 0, 0.75); }
+
+.cmp-list { min-width: 0; }
+.cmp-changes {
+  margin: 0; padding: 0; list-style: none;
+  max-height: 70vh; overflow: auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.cmp-change {
+  display: flex; flex-direction: column; gap: 2px; width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e5e9);
+  border-left-width: 3px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.cmp-change.is-removed { border-left-color: rgba(200, 40, 40, 0.7); }
+.cmp-change.is-added { border-left-color: rgba(28, 150, 70, 0.7); }
+.cmp-change.is-chosen { background: var(--surface-sunken, #f4f5f7); }
+.cmp-where { font-size: 11px; font-weight: 700; color: var(--muted, #6b7280); }
+.cmp-what {
+  font-size: 12px; line-height: 1.4;
+  /* Two lines is enough to recognise the line; the document shows the rest. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
 /* ---- The signature builder --------------------------------------------- */
 /* The faces the workers draw with, served from this host. No external request
    is made for them, and the preview therefore matches the result. */

@@ -169,6 +169,24 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
      */
     const showsSize = tool !== null && SIZE_IS_THE_POINT.has(tool.ui.group)
 
+    /**
+     * A comparison is shown, not listed. The viewer needs both originals — which
+     * is why inputs are served as well as outputs — and the change list the
+     * comparison wrote, which says where each change sits on which page.
+     */
+    const at = (file: { id: string }) => `/jobs/${job.id}/files/${file.id}`
+    const changeList = outputs.find((f) => f.mime === 'application/json')
+    const compare =
+      tool?.ui.result === 'compare' && inputs.length === 2 && changeList
+        ? {
+            before: at(inputs[0]!),
+            after: at(inputs[1]!),
+            beforeName: inputs[0]!.name,
+            afterName: inputs[1]!.name,
+            changes: at(changeList),
+          }
+        : null
+
     return reply.view('job.njk', pageData(ctx, req, reply, {
       job,
       tool,
@@ -176,6 +194,7 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
       outputs: await Promise.all(outputs.map((f) => describeOutput(ctx, job.id, f))),
       comparisons,
       showsSize,
+      compare,
       isFinished: ['done', 'failed', 'expired', 'cancelled'].includes(job.status),
     }))
   })

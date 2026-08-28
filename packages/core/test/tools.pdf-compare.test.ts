@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import sharp from 'sharp'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
@@ -90,6 +90,80 @@ describe('comparing two PDFs', () => {
     expect(outs[0]!.name).toBe('comparison.pdf')
     expect(outs[0]!.meta).toMatchObject({ removed: 1, added: 1 })
   })
+
+describe('the change list a viewer can draw with', () => {
+  /**
+   * The report says what changed in words. Showing it means knowing WHERE each
+   * change is on the page, which the report does not carry — so the comparison
+   * also writes the changes out with the box each one occupies, and which of
+   * the two documents it belongs to.
+   */
+  const changesOf = async (outs: Awaited<ReturnType<typeof run>>) => {
+    const file = outs.find((o) => o.mime === 'application/json')
+    expect(file, 'no change list was written').toBeDefined()
+    return JSON.parse(await readFile(file!.path, 'utf8'))
+  }
+
+  it('writes the changes out beside the report', async () => {
+    const before = await docOf('cl-a.pdf', [['Alpha line', 'Beta line']])
+    const after = await docOf('cl-b.pdf', [['Alpha line', 'Gamma line']])
+
+    const list = await changesOf(await run([before, after]))
+
+    expect(list.changes.length).toBeGreaterThan(0)
+    expect(list.before.name).toBe('cl-a.pdf')
+    expect(list.after.name).toBe('cl-b.pdf')
+  })
+
+  it('says which document each change belongs to', async () => {
+    const before = await docOf('cl-c.pdf', [['Kept', 'Departed']])
+    const after = await docOf('cl-d.pdf', [['Kept', 'Arrived']])
+
+    const list = await changesOf(await run([before, after]))
+    const gone = list.changes.find((c: { text: string }) => c.text.includes('Departed'))
+    const came = list.changes.find((c: { text: string }) => c.text.includes('Arrived'))
+
+    expect(gone).toMatchObject({ side: 'before', kind: 'removed', page: 1 })
+    expect(came).toMatchObject({ side: 'after', kind: 'added', page: 1 })
+  })
+
+  it('puts a box around the line that changed, not the whole page', async () => {
+    // The fixture writes lines 20 points apart from y=440 down, so a box that
+    // covers the page — or the wrong line — is caught here rather than by eye.
+    const before = await docOf('cl-e.pdf', [['First', 'Second', 'Third']])
+    const after = await docOf('cl-f.pdf', [['First', 'CHANGED', 'Third']])
+
+    const list = await changesOf(await run([before, after]))
+    const change = list.changes.find((c: { text: string }) => c.text.includes('CHANGED'))
+
+    expect(change.pageSize).toMatchObject({ width: 400, height: 500 })
+    expect(change.box.height).toBeLessThan(40)
+    expect(change.box.width).toBeLessThan(200)
+    // Second line of three, so roughly a fifth of the way down a 500pt page.
+    expect(change.box.y).toBeGreaterThan(30)
+    expect(change.box.y).toBeLessThan(120)
+  })
+
+  it('finds a change on the page it is actually on', async () => {
+    const before = await docOf('cl-g.pdf', [['Page one'], ['Page two same'], ['Page three old']])
+    const after = await docOf('cl-h.pdf', [['Page one'], ['Page two same'], ['Page three new']])
+
+    const list = await changesOf(await run([before, after]))
+
+    expect(list.changes.every((c: { page: number }) => c.page === 3)).toBe(true)
+  })
+
+  it('writes an empty list rather than no list when nothing differs', async () => {
+    // A viewer that has to cope with a missing file is a viewer with two paths
+    // through it, one of which is rarely exercised.
+    const same = await docOf('cl-i.pdf', [['Identical']])
+    const copy = await docOf('cl-j.pdf', [['Identical']])
+
+    const list = await changesOf(await run([same, copy]))
+
+    expect(list.changes).toEqual([])
+  })
+})
 
   it('treats a difference that is only spacing as no difference', async () => {
     /**

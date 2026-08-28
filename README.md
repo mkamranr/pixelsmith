@@ -43,6 +43,14 @@ still there, and still authoritative, for anyone who wants them.
   <img src="docs/screenshots/crop-pdf.jpg" alt="Cropping a PDF by dragging on the page, with a rail of pages alongside" width="820">
 </p>
 
+Comparing two versions shows both documents side by side, scroll-synced, with
+what left marked in red and what arrived in green — and a list of every change
+you can click to jump to it.
+
+<p align="center">
+  <img src="docs/screenshots/compare-pdf.jpg" alt="Two versions of a report side by side with the changes highlighted and listed" width="820">
+</p>
+
 Everything the pages can do, a script can do. The API is documented in the app
 as well as in [docs/API.md](docs/API.md).
 

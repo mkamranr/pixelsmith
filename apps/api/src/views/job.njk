@@ -89,6 +89,34 @@
 </ul>
 {% endif %}
 
+{% if compare %}
+<h2 class="section-title">What changed</h2>
+<p class="lede">Both documents, with what left marked in red and what arrived marked in green.
+  Scroll either side; the other follows.</p>
+<section class="cmp" data-compare-docs
+         data-compare-before="{{ compare.before }}"
+         data-compare-after="{{ compare.after }}"
+         data-compare-changes="{{ compare.changes }}"
+         data-pdfjs="{{ asset('/static/vendor/pdfjs/pdf.min.mjs') }}"
+         data-pdfjs-worker="{{ asset('/static/vendor/pdfjs/pdf.worker.min.mjs') }}"
+         data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+         data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
+  <div class="cmp-side" data-cmp-side="before">
+    <h3 class="cmp-name">{{ compare.beforeName }}</h3>
+    <div class="cmp-scroll" data-cmp-scroll="before"></div>
+  </div>
+  <div class="cmp-side" data-cmp-side="after">
+    <h3 class="cmp-name">{{ compare.afterName }}</h3>
+    <div class="cmp-scroll" data-cmp-scroll="after"></div>
+  </div>
+  <aside class="cmp-list">
+    <h3 class="cmp-name">Changes <span class="muted" data-cmp-count></span></h3>
+    <ol class="cmp-changes" data-cmp-changes></ol>
+    <p class="hint" data-cmp-status>Rendering both documents…</p>
+  </aside>
+</section>
+{% endif %}
+
 {% for f in outputs %}{% if f.kind == 'text' and f.text %}
 <h2 class="section-title">{{ 'Summary' if 'summary' in f.name else 'Text' }}</h2>
 <article class="result-text">
@@ -160,4 +188,5 @@
 {% block scripts %}<script src="{{ asset('/static/compare.js') }}" defer></script>{% set hasDocuments = false %}
 {% for f in outputs %}{% if f.kind == 'document' %}{% set hasDocuments = true %}{% endif %}{% endfor %}
 {% if hasDocuments %}<script src="{{ asset('/static/docthumbs.js') }}" type="module"></script>{% endif %}
+{% if compare %}<script src="{{ asset('/static/comparedocs.js') }}" type="module"></script>{% endif %}
 {% endblock %}

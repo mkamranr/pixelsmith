@@ -136,6 +136,75 @@ describe('the size difference', () => {
   })
 })
 
+describe('comparing two documents', () => {
+  /**
+   * A report that says "page 3, line removed" is a lookup exercise. Showing the
+   * two documents beside each other with the changes marked on them is the
+   * point of comparing, so the page hands the viewer both originals and the
+   * change list the comparison wrote.
+   */
+  const compareJob = async () =>
+    finishedJob('compare-pdf', [
+      { role: 'input', name: 'before.pdf', mime: 'application/pdf', body: await samplePdf('before') },
+      { role: 'input', name: 'after.pdf', mime: 'application/pdf', body: await samplePdf('after') },
+      { role: 'output', name: 'comparison.pdf', mime: 'application/pdf', body: await samplePdf('report') },
+      {
+        role: 'output',
+        name: 'comparison-changes.json',
+        mime: 'application/json',
+        body: Buffer.from(
+          JSON.stringify({
+            before: { name: 'before.pdf', pages: 1 },
+            after: { name: 'after.pdf', pages: 1 },
+            removed: 1,
+            added: 1,
+            changes: [
+              {
+                page: 1,
+                side: 'before',
+                kind: 'removed',
+                text: 'Departed',
+                box: { x: 40, y: 60, width: 80, height: 16 },
+                pageSize: { width: 300, height: 400 },
+              },
+            ],
+          }),
+        ),
+      },
+    ])
+
+  it('offers the side-by-side view', async () => {
+    const { body } = await compareJob()
+
+    expect(body).toContain('data-compare-docs')
+    expect(body).toContain('/static/comparedocs.js')
+  })
+
+  it('points the view at both originals and the change list', async () => {
+    const { body } = await compareJob()
+
+    expect(body).toMatch(/data-compare-before="\/jobs\/[^"]+"/)
+    expect(body).toMatch(/data-compare-after="\/jobs\/[^"]+"/)
+    expect(body).toMatch(/data-compare-changes="\/jobs\/[^"]+"/)
+  })
+
+  it('does not show a machine-readable list as if it were a result to read', async () => {
+    // The change list exists for the viewer. Dumping its JSON into the page as
+    // a "text result" would be worse than not showing it at all.
+    const { body } = await compareJob()
+
+    expect(body).not.toContain('"pageSize"')
+  })
+
+  it('leaves other tools alone', async () => {
+    const { body } = await finishedJob('rotate-pdf', [
+      { role: 'output', name: 'out.pdf', mime: 'application/pdf', body: await samplePdf('after') },
+    ])
+
+    expect(body).not.toContain('data-compare-docs')
+  })
+})
+
 describe('a result that is text', () => {
   it('is readable on the page, without downloading it first', async () => {
     // The point of asking for a summary is to read it. Handing over a file and
