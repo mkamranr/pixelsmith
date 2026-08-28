@@ -1,11 +1,54 @@
+import { readFile } from 'node:fs/promises'
+
 import type { FastifyInstance } from 'fastify'
 import { isPixelsmithError } from '@pixelsmith/contracts'
 import { acceptAttribute, describeAccepts } from '@pixelsmith/core'
+import type { JobFile } from '@pixelsmith/db'
 import type { AppContext } from '../context.js'
 import { BadRequestError, NotFoundError } from '../errors.js'
 import { intakeJob } from '../intake.js'
 import { pageData } from '../render.js'
 import { jobFor } from '../job-access.js'
+
+/** Tool groups whose whole purpose is the size of the file. */
+const SIZE_IS_THE_POINT = new Set(['optimize', 'pdf-optimize'])
+
+/** Enough of a text result to read on the page without loading a whole book. */
+const TEXT_PREVIEW_LIMIT = 20_000
+
+/**
+ * What the page needs to know about one result: whether it can be shown as a
+ * picture, and if it is text, the text itself. A summary handed over as a file
+ * to open elsewhere is the job left half done — the point of asking for one is
+ * to read it.
+ */
+async function describeOutput(ctx: AppContext, jobId: string, file: JobFile) {
+  const kind = file.mime.startsWith('image/')
+    ? 'image'
+    : file.mime === 'application/pdf'
+      ? 'document'
+      : file.mime.startsWith('text/')
+        ? 'text'
+        : 'file'
+
+  let text: string | null = null
+  let truncated = false
+  if (kind === 'text' && file.bytes > 0) {
+    try {
+      const path = await ctx.storage.readable(jobId, file.relPath)
+      const raw = await readFile(path, 'utf8')
+      truncated = raw.length > TEXT_PREVIEW_LIMIT
+      text = truncated ? raw.slice(0, TEXT_PREVIEW_LIMIT) : raw
+    } catch {
+      // Swept, or unreadable. The download link still speaks for itself, and a
+      // results page that fails because a preview could not be read would be a
+      // worse outcome than a results page without the preview.
+      text = null
+    }
+  }
+
+  return { ...file, kind, text, truncated }
+}
 
 /** Where a failed form send the user back to, with a readable reason. */
 const back = (path: string, message: string) => `${path}?error=${encodeURIComponent(message)}`
@@ -106,19 +149,33 @@ export async function registerPages(app: FastifyInstance, ctx: AppContext) {
     const inputs = files.filter((f) => f.role === 'input')
     const outputs = files.filter((f) => f.role === 'output')
 
-    // Only offer a comparison where there is genuinely something to compare
-    // against: a generator tool has no original.
+    /**
+     * Offer a comparison only where there is something to compare and a way to
+     * compare it. A generator tool has no original; and two documents cannot be
+     * slid over one another in an <img>, which is what the slider did — two
+     * broken images with a percentage between them.
+     */
+    const isPicture = (f: { mime: string }) => f.mime.startsWith('image/')
     const comparisons =
-      outputs.length === inputs.length
+      outputs.length === inputs.length && outputs.every(isPicture) && inputs.every(isPicture)
         ? outputs.map((out, index) => ({ before: inputs[index]!, after: out }))
         : []
+
+    /**
+     * Whether a size difference is worth stating. It is the point of a
+     * compressor and noise everywhere else: "0% larger" beside a rotated page
+     * reads as a fault, and "84% smaller" beside a summary invites the thought
+     * that the document was compressed rather than read.
+     */
+    const showsSize = tool !== null && SIZE_IS_THE_POINT.has(tool.ui.group)
 
     return reply.view('job.njk', pageData(ctx, req, reply, {
       job,
       tool,
       inputs,
-      outputs,
+      outputs: await Promise.all(outputs.map((f) => describeOutput(ctx, job.id, f))),
       comparisons,
+      showsSize,
       isFinished: ['done', 'failed', 'expired', 'cancelled'].includes(job.status),
     }))
   })

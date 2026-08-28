@@ -172,6 +172,22 @@ export const summarisePdf: Tool<SummarisePdfParams> = {
         bytes: (await stat(dest)).size,
         meta: { parts: parts.length, characters: text.length },
       })
+
+      /**
+       * The same summary as plain text, so the results page can show it. A
+       * summary that can only be read by downloading a PDF and opening it
+       * somewhere else is the point of asking for one left undone — and the
+       * text is what anyone wants to paste into a message anyway.
+       */
+      const textName = uniqueName(taken, deriveName(input.name, { ext: 'txt', suffix: '-summary' }))
+      const textDest = join(outDir, textName)
+      await writeFile(textDest, `${summary.trim()}\n`, 'utf8')
+      outputs.push({
+        path: textDest,
+        name: textName,
+        mime: 'text/plain',
+        bytes: (await stat(textDest)).size,
+      })
       onProgress?.((index + 1) / inputs.length)
     }
 

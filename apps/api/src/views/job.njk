@@ -1,5 +1,6 @@
 {% extends "layout.njk" %}
 {% import "_macros.njk" as m %}
+{% import "_icons.njk" as ic %}
 {% block title %}Job {{ job.id | truncate(8, true, "") }} — Pixelsmith{% endblock %}
 {% block content %}
 
@@ -73,11 +74,13 @@
     </div>
     <div class="compare-meta">
       <span class="result-name" title="{{ pair.after.name }}">{{ pair.after.name }}</span>
-      {% set saved = pair.before.bytes - pair.after.bytes %}
-      {% if saved > 0 %}
-        <span class="pill pill-done">{{ (saved / pair.before.bytes * 100) | round }}% smaller</span>
-      {% elif saved < 0 %}
-        <span class="pill">{{ ((0 - saved) / pair.before.bytes * 100) | round }}% larger</span>
+      {% if showsSize %}
+        {% set saved = pair.before.bytes - pair.after.bytes %}
+        {% if saved > 0 %}
+          <span class="pill pill-done">{{ (saved / pair.before.bytes * 100) | round }}% smaller</span>
+        {% elif saved < 0 %}
+          <span class="pill">{{ ((0 - saved) / pair.before.bytes * 100) | round }}% larger</span>
+        {% endif %}
       {% endif %}
       <a class="btn btn-quiet btn-sm" href="/jobs/{{ job.id }}/files/{{ pair.after.id }}" download>Download</a>
     </div>
@@ -86,13 +89,41 @@
 </ul>
 {% endif %}
 
+{% for f in outputs %}{% if f.kind == 'text' and f.text %}
+<h2 class="section-title">{{ 'Summary' if 'summary' in f.name else 'Text' }}</h2>
+<article class="result-text">
+  <pre>{{ f.text }}</pre>
+  {% if f.truncated %}
+    <p class="hint">Shown to the first {{ f.text | length }} characters. The file has the rest.</p>
+  {% endif %}
+  <a class="btn btn-quiet btn-sm" href="{{ '/jobs/' + job.id + '/files/' + f.id }}" download>Download as text</a>
+</article>
+{% endif %}{% endfor %}
+
 {% if outputs | length %}
 <h2 class="section-title">Results</h2>
-<ul class="result-grid">
+<ul class="result-grid" data-doc-thumbs
+    data-pdfjs="{{ asset('/static/vendor/pdfjs/pdf.min.mjs') }}"
+    data-pdfjs-worker="{{ asset('/static/vendor/pdfjs/pdf.worker.min.mjs') }}"
+    data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+    data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
   {% for f in outputs %}
   <li class="result">
-    <a class="result-preview" href="/jobs/{{ job.id }}/files/{{ f.id }}">
-      <img src="/jobs/{{ job.id }}/files/{{ f.id }}" alt="{{ f.name }}" loading="lazy">
+    <a class="result-preview" href="{{ '/jobs/' + job.id + '/files/' + f.id }}">
+      {% if f.kind == 'image' %}
+        <img src="{{ '/jobs/' + job.id + '/files/' + f.id }}" alt="{{ f.name }}" loading="lazy">
+      {% else %}
+        {# A tile rather than a broken image. A script turns the document ones
+           into a real first-page thumbnail; without it this is what remains,
+           and it reads correctly. #}
+        <span class="doc-tile"
+              {% if f.kind == 'document' %}data-doc-tile="{{ '/jobs/' + job.id + '/files/' + f.id }}"{% endif %}>
+          <span class="doc-tile-icon" aria-hidden="true">
+            {{ ic.icon('archive' if f.kind == 'file' else 'file-text', 30) }}
+          </span>
+          <span class="doc-tile-kind">{{ 'PDF' if f.kind == 'document' else ('Text' if f.kind == 'text' else 'File') }}</span>
+        </span>
+      {% endif %}
     </a>
     <div class="result-meta">
       <span class="result-name" title="{{ f.name }}">{{ f.name }}</span>
@@ -126,4 +157,7 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}<script src="{{ asset('/static/compare.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('/static/compare.js') }}" defer></script>{% set hasDocuments = false %}
+{% for f in outputs %}{% if f.kind == 'document' %}{% set hasDocuments = true %}{% endif %}{% endfor %}
+{% if hasDocuments %}<script src="{{ asset('/static/docthumbs.js') }}" type="module"></script>{% endif %}
+{% endblock %}

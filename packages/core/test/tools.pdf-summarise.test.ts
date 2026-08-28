@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -126,15 +126,43 @@ describe('summarising a document', () => {
 
     const outs = await run([src])
 
-    expect(outs).toHaveLength(1)
-    expect(outs[0]!.name).toBe('report-summary.pdf')
-    const written = (await extractPdfText(outs[0]!.path)).join(' ')
+    const pdf = outs.find((o) => o.mime === 'application/pdf')!
+    expect(pdf.name).toBe('report-summary.pdf')
+    const written = (await extractPdfText(pdf.path)).join(' ')
     expect(written).toContain('three changes to the tendering process')
 
     // The document's own words went to the model, not its file name.
     const sent = JSON.stringify(asked.at(-1)!.body)
     expect(sent).toContain('Tendering review')
     expect(asked.at(-1)!.path).toContain('/chat/completions')
+  })
+
+  it('hands back the summary as text as well as a document', async () => {
+    /**
+     * The results page can read a text file and show it. Without this the only
+     * way to see a summary was to download a PDF and open it somewhere else,
+     * which is the whole point of asking for a summary left undone.
+     */
+    asked = []
+    replies = ['The generator failed two of its last four monthly tests.']
+    const src = await pdfOf('risks.pdf', ['Risk register', 'Generator tests.'])
+
+    const outs = await run([src])
+    const text = outs.find((o) => o.mime === 'text/plain')
+
+    expect(text, 'no text output').toBeDefined()
+    expect(text!.name).toBe('risks-summary.txt')
+    expect(await readFile(text!.path, 'utf8')).toContain('failed two of its last four')
+  })
+
+  it('still hands back the document, which is what gets filed', async () => {
+    asked = []
+    replies = ['Brief.']
+    const src = await pdfOf('filed.pdf', ['Something', 'To summarise.'])
+
+    const outs = await run([src])
+
+    expect(outs.map((o) => o.mime).sort()).toEqual(['application/pdf', 'text/plain'])
   })
 
   it('asks for the length it was told to', async () => {

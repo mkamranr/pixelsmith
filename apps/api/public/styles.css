@@ -1532,6 +1532,53 @@ input.is-driven { display: none; }
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
 
+/* ---- Results that are not pictures ------------------------------------- */
+/* A document tile: correct on its own, and replaced by a rendered first page
+   when the browser can draw one. */
+.doc-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px;
+  width: 100%; min-height: 150px;
+  color: var(--muted, #6b7280);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(244, 245, 247, 0.9));
+  border: 1px solid var(--line, #e3e5e9);
+  border-radius: 6px;
+}
+.doc-tile-kind {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.doc-tile.has-thumb {
+  position: relative;
+  min-height: 0; padding: 0; gap: 0;
+  background: #fff;
+  overflow: hidden;
+}
+.doc-thumb { display: block; width: 100%; height: auto; }
+.doc-pages {
+  position: absolute; right: 6px; bottom: 6px;
+  padding: 2px 7px;
+  font-size: 11px; font-weight: 600;
+  color: #fff; background: rgba(16, 18, 24, 0.72);
+  border-radius: 999px;
+}
+
+/* A text result is read here rather than downloaded and opened elsewhere. */
+.result-text {
+  padding: 18px 20px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e3e5e9);
+  border-radius: 8px;
+}
+.result-text pre {
+  margin: 0 0 14px;
+  max-height: 60vh; overflow: auto;
+  font: inherit;
+  /* A summary is prose: wrap it like prose rather than scrolling sideways. */
+  white-space: pre-wrap; word-wrap: break-word;
+  line-height: 1.6;
+}
+
 /* ---- Marking areas on a photo ------------------------------------------ */
 /* The layer is positioned by script to sit exactly over the rendered picture,
    which is centred in its plate and may be letterboxed. */
