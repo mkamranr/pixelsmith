@@ -7,7 +7,7 @@ import { BadInputError } from '../errors.js'
 import { PDF_MIME } from '../pdf.js'
 import { preparePdfText } from '../pdf-draw-text.js'
 import { pdfPageText, type PageText, type TextPiece } from '../pdf-text.js'
-import { stripControlChars, wrapText } from '../text.js'
+import { isRightToLeft, stripControlChars, wrapText } from '../text.js'
 import type { Tool } from '../registry.js'
 
 const PAGE_WIDTH = 595
@@ -221,7 +221,19 @@ export const comparePdf: Tool<ComparePdfParams> = {
         ...(options.colour ? { colour: options.colour } : {}),
         ...(options.bold ? { bold: options.bold } : {}),
       })
-      mark.draw(page, { x: MARGIN + (options.indent ?? 0), y: cursor })
+      /**
+       * Set against the margin its own language starts from. This writer is the
+       * report's own — the shared one in pdf-document.ts learned the same thing
+       * separately, and an Arabic report was still coming out left-aligned.
+       *
+       * An indent moves the line further in from whichever margin it starts at,
+       * which is what an indent means.
+       */
+      const indent = options.indent ?? 0
+      const x = isRightToLeft(text)
+        ? Math.max(MARGIN, PAGE_WIDTH - MARGIN - indent - mark.width)
+        : MARGIN + indent
+      mark.draw(page, { x, y: cursor })
     }
 
     await line(stripControlChars(params.title), { size: 18, bold: true })

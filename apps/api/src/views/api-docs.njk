@@ -33,10 +33,10 @@
   a script, poll the status instead.
 </p>
 <p class="hint">
-  There is no API-key mechanism yet. The table exists in the database but
-  nothing issues or verifies keys — worth knowing before you write a client
-  around it. Per-job tokens are not a substitute: they authorise one job, not a
-  caller.
+  There are no API keys. A table for them used to sit in the database implying
+  otherwise; it has been dropped. Per-job tokens are not a substitute — they
+  authorise one job, not a caller — so a script on a deployment with accounts
+  signs in and keeps the session cookie.
 </p>
 
 <h2 class="section-title">Endpoints</h2>

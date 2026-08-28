@@ -91,6 +91,71 @@ describe('comparing two PDFs', () => {
     expect(outs[0]!.meta).toMatchObject({ removed: 1, added: 1 })
   })
 
+describe('a report in a right-to-left language', () => {
+  /**
+   * The report has its own line writer, so the alignment fix that went into the
+   * shared one did not reach it: an Arabic report came out left-aligned, which
+   * reads as though the page were the wrong way round.
+   *
+   * The title is the line this can be checked on — a fixture cannot carry
+   * Arabic body text, because the standard fonts a fixture is built with cannot
+   * encode it, which is the whole reason preparePdfText exists.
+   */
+  const sideOfInk = async (path: string) => {
+    const png = await renderPdfPage(path, 1, { scale: 1 })
+    const { width = 595, height = 842 } = await sharp(png).metadata()
+    const half = Math.floor(width / 2)
+    const grey = await sharp(png).greyscale().raw().toBuffer()
+
+    /**
+     * The title's own rows, found rather than assumed. The lines under it — the
+     * filenames, the counts — are English and stay left-aligned, so a band
+     * wide enough to include them measures the wrong thing.
+     */
+    let from = -1
+    let to = -1
+    for (let y = 0; y < height; y += 1) {
+      let dark = 0
+      for (let x = 0; x < width; x += 1) if (grey[y * width + x]! < 200) dark += 1
+      if (dark > 0 && from === -1) from = y
+      if (dark === 0 && from !== -1) {
+        to = y
+        break
+      }
+    }
+    expect(from, 'no ink on the page at all').toBeGreaterThan(-1)
+
+    const ink = async (left: number) => {
+      const strip = await sharp(png)
+        .extract({ left, top: from, width: half, height: Math.max(1, to - from) })
+        .greyscale()
+        .toBuffer()
+      return 255 - (await sharp(strip).stats()).channels[0]!.mean
+    }
+    return { left: await ink(0), right: await ink(half) }
+  }
+
+  it('sets an Arabic title against the right margin', async () => {
+    const before = await docOf('rtl-a.pdf', [['Alpha line']])
+    const after = await docOf('rtl-b.pdf', [['Beta line']])
+
+    const outs = await run([before, after], { title: 'تقرير المقارنة' })
+
+    const ink = await sideOfInk(outs[0]!.path)
+    expect(ink.right).toBeGreaterThan(ink.left)
+  })
+
+  it('leaves an English title against the left margin', async () => {
+    const before = await docOf('ltr-a.pdf', [['Alpha line']])
+    const after = await docOf('ltr-b.pdf', [['Beta line']])
+
+    const outs = await run([before, after], { title: 'Comparison report' })
+
+    const ink = await sideOfInk(outs[0]!.path)
+    expect(ink.left).toBeGreaterThan(ink.right)
+  })
+})
+
 describe('the change list a viewer can draw with', () => {
   /**
    * The report says what changed in words. Showing it means knowing WHERE each

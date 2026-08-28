@@ -15,6 +15,13 @@
       "when": 1787859018100,
       "tag": "0001_amazing_sersi",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787912041766,
+      "tag": "0002_hesitant_madame_masque",
+      "breakpoints": true
     }
   ]
 }

@@ -50,25 +50,6 @@ export const sessions = sqliteTable(
   (t) => [index('sessions_user_idx').on(t.userId), index('sessions_expiry_idx').on(t.expiresAt)],
 )
 
-export const apiKeys = sqliteTable(
-  'api_keys',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    /** Short public prefix, shown in the UI so a key is identifiable after issue. */
-    prefix: text('prefix').notNull(),
-    keyHash: text('key_hash').notNull(),
-    lastUsedAt: integer('last_used_at'),
-    expiresAt: integer('expires_at'),
-    revokedAt: integer('revoked_at'),
-    createdAt: createdAt(),
-  },
-  (t) => [index('api_keys_user_idx').on(t.userId), uniqueIndex('api_keys_prefix_unique').on(t.prefix)],
-)
-
 export const jobs = sqliteTable(
   'jobs',
   {
@@ -143,7 +124,6 @@ export const auditLog = sqliteTable(
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Session = typeof sessions.$inferSelect
-export type ApiKey = typeof apiKeys.$inferSelect
 export type Job = typeof jobs.$inferSelect
 export type JobFile = typeof jobFiles.$inferSelect
 export type AuditEntry = typeof auditLog.$inferSelect

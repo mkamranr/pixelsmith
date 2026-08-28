@@ -42,9 +42,11 @@ rather than the URL, because URLs end up in logs, proxies and browser history.
 > cannot set headers, so that endpoint relies on the cookie. From a script, poll
 > `GET /api/jobs/{id}` instead.
 
-There is no API-key mechanism. The table exists in the database but nothing
-issues or verifies keys — worth knowing before you write a client around it.
-Per-job tokens are not a substitute: they authorise one job, not a caller.
+There are no API keys, and the table that once implied there might be has been
+dropped rather than left to suggest a feature nobody wrote. Per-job tokens are
+not a substitute — they authorise one job, not a caller — so a script under
+`accounts` mode signs in and keeps the session cookie. If scripted access ever
+needs its own credential, that is a feature to add deliberately.
 
 ## Endpoints
 
