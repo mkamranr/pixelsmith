@@ -1644,6 +1644,56 @@ input.is-driven { display: none; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
+/* ---- Things placed on a page ------------------------------------------- */
+.pdf-items { margin-bottom: 16px; }
+.pdf-items-palette { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pdf-items-colours { display: flex; gap: 6px; margin-bottom: 8px; }
+.pdf-swatch {
+  width: 22px; height: 22px; padding: 0;
+  border: 1px solid var(--line-strong, #cfd3da); border-radius: 50%;
+  cursor: pointer;
+}
+.pdf-swatch.is-black { background: #1a1a1f; }
+.pdf-swatch.is-blue { background: #17308c; }
+.pdf-swatch.is-red { background: #b82020; }
+.pdf-swatch.is-green { background: #155c31; }
+.pdf-swatch.is-yellow { background: #fadb33; }
+
+/* Positioned as a fraction of the page, so zooming cannot separate a thing
+   from the place it was put. */
+.pdf-item {
+  position: absolute;
+  min-width: 10px; min-height: 10px;
+  cursor: move;
+  touch-action: none;
+}
+.pdf-item.is-box { border: 1.5px solid transparent; border-radius: 2px; }
+.pdf-item.is-selected { outline: 1px dashed var(--accent, #c4551f); outline-offset: 2px; }
+.pdf-item-text { display: block; line-height: 1.2; white-space: pre-wrap; word-break: break-word; }
+.pdf-item.is-picture {
+  display: grid; place-items: center;
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted, #6b7280);
+  background: rgba(140, 145, 160, 0.18);
+  border: 1px dashed var(--line-strong, #cfd3da);
+}
+
+.pdf-item-grip {
+  position: absolute; right: -6px; bottom: -6px;
+  width: 12px; height: 12px;
+  background: #fff; border: 2px solid var(--accent, #c4551f); border-radius: 2px;
+  cursor: nwse-resize;
+}
+.pdf-item-drop {
+  position: absolute; top: -11px; right: -11px;
+  width: 20px; height: 20px; padding: 0;
+  display: grid; place-items: center;
+  font-size: 14px; line-height: 1; color: #fff;
+  background: var(--accent, #c4551f); border: 2px solid #fff; border-radius: 50%;
+  cursor: pointer; opacity: 0; transition: opacity 0.12s;
+}
+.pdf-item:hover .pdf-item-drop, .pdf-item.is-selected .pdf-item-drop { opacity: 1; }
+
 /* ---- Filling a form's own boxes ---------------------------------------- */
 .form-fill { margin-bottom: 18px; }
 .form-fields { display: flex; flex-direction: column; gap: 10px; }

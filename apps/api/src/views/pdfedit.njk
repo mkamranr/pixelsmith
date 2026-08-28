@@ -134,6 +134,28 @@
     #}
     {% set placed = ['x', 'y', 'width', 'height', 'regions', 'pages'] %}
 
+    {% if tool.ui.pdfEdit == 'items' %}
+    {# A palette rather than a panel of controls: each button adds a thing whose
+       look is already decided, and it is then dragged where it belongs. #}
+    <div class="pdf-items" data-pdf-items>
+      <span class="panel-label">Add to this page</span>
+      <div class="pdf-items-palette">
+        <button type="button" class="chip-btn" data-pdf-add="text">Words</button>
+        <button type="button" class="chip-btn" data-pdf-add="box">Box</button>
+        <button type="button" class="chip-btn" data-pdf-add="highlight">Highlight</button>
+        <button type="button" class="chip-btn" data-pdf-add="image">Picture</button>
+      </div>
+      <div class="pdf-items-colours">
+        {% for c in ['black', 'blue', 'red', 'green', 'yellow'] %}
+          <button type="button" class="pdf-swatch is-{{ c }}" data-pdf-item-colour="{{ c }}"
+                  aria-label="Make the selected thing {{ c }}"></button>
+        {% endfor %}
+      </div>
+      <p class="hint">Drag to move, the corner to resize, double-click words to change them.
+        <span data-pdf-items-count></span></p>
+    </div>
+    {% endif %}
+
     {% if tool.ui.builder == 'signature' %}
     {# Three ways to produce a mark. The fields below stay authoritative and
        usable on their own: this only fills them in. #}
@@ -188,5 +210,6 @@
 
 <script src="{{ asset('/static/pdfedit.js') }}" defer></script>
 {% if tool.ui.builder == 'signature' %}<script src="{{ asset('/static/signature.js') }}" defer></script>{% endif %}
+{% if tool.ui.pdfEdit == 'items' %}<script src="{{ asset('/static/pdfitems.js') }}" defer></script>{% endif %}
 {% endif %}
 {% endblock %}

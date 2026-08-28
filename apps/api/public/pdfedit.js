@@ -675,6 +675,16 @@
         if (pageLabel) pageLabel.textContent = current + ' / ' + pageCount
         if (zoomLabel) zoomLabel.textContent = Math.round(zoom * 100) + '%'
         markRail()
+        /**
+         * Announced so a mode that draws its own things on the page — placing
+         * words, boxes and pictures — knows which page is on screen and how
+         * large it came out, without reaching into this file's state.
+         */
+        document.dispatchEvent(
+          new CustomEvent('pixelsmith:pdfpage', {
+            detail: { page: current, pages: pageCount, width: viewport.width, height: viewport.height },
+          }),
+        )
       })
     })
   }

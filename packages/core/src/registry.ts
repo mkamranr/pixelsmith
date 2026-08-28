@@ -43,9 +43,10 @@ export interface ToolUi {
    * How a document is edited on the page itself, rather than by typing numbers
    * into fields. Named after the interaction rather than the tool, because
    * several tools want the same one: `crop` is a single rectangle, `boxes` is
-   * any number of them, `place` is a mark dropped where it should sit.
+   * any number of them, `place` is a mark dropped where it should sit, and
+   * `items` is any number of things of different kinds.
    */
-  pdfEdit?: 'crop' | 'boxes' | 'place'
+  pdfEdit?: 'crop' | 'boxes' | 'place' | 'items'
   /**
    * The same idea for a picture: areas marked on the image itself rather than
    * typed as numbers. Separate from `pdfEdit` because the thing underneath is

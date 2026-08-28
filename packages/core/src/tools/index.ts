@@ -7,6 +7,7 @@ import { editor } from './editor.js'
 import { htmlShot } from './htmlshot.js'
 import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
+import { editPdf } from './pdf-edit.js'
 import { fillForm } from './pdf-form.js'
 import { scanPdf } from './pdf-scan.js'
 import { pdfToMarkdown } from './pdf-to-markdown.js'
@@ -82,6 +83,7 @@ export const ALL_TOOLS = [
   pdfToPowerpoint,
   redactPdf,
   signPdf,
+  editPdf,
   fillForm,
   comparePdf,
   summarisePdf,
@@ -104,6 +106,7 @@ export {
   pdfToImage,
   pdfWatermark,
   organizePdf,
+  editPdf,
   fillForm,
   pdfToMarkdown,
   removePages,
