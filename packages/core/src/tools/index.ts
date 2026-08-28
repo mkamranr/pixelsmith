@@ -7,6 +7,7 @@ import { editor } from './editor.js'
 import { htmlShot } from './htmlshot.js'
 import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
+import { scanPdf } from './pdf-scan.js'
 import { pdfToMarkdown } from './pdf-to-markdown.js'
 import { translatePdf } from './pdf-translate.js'
 import { removePages } from './pdf-remove-pages.js'
@@ -64,6 +65,7 @@ export const ALL_TOOLS = [
   pdfToImage,
   pdfToMarkdown,
   imagesToPdf,
+  scanPdf,
   pdfPageNumbers,
   pdfWatermark,
   pdfCrop,
@@ -103,6 +105,7 @@ export {
   pdfToMarkdown,
   removePages,
   rotatePdf,
+  scanPdf,
   splitPdf,
   translatePdf,
   blurFaces,

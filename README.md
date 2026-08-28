@@ -108,6 +108,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **Compress** | Smaller documents by rebuilding what is oversized |
 | **PDF to image** | Every page as JPEG or PNG, at a resolution you pick |
 | **Images to PDF** | A folder of pictures into one document |
+| **Scan to PDF** | Photographs of pages into something that looks scanned, not photographed |
 | **Office to PDF** | Word, Excel, PowerPoint and OpenDocument files |
 | **PDF to Word** | Editable text, in text boxes rather than flowing paragraphs |
 | **PDF to Excel** | The text as rows, with columns recovered from the gaps |

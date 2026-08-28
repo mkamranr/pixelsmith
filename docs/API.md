@@ -199,7 +199,7 @@ multipart fields.
 | `upscale` | Upscale image | `scale` |
 | `watermark` | Watermark images | `mark`, `text`, `markFile`, `markScale`, `x`, `y`, `position`, `tiled`, `color`, `opacity`, `fontSize` |
 
-### PDF tools (26)
+### PDF tools (27)
 
 | `tool` | Name | Parameters |
 |---|---|---|
@@ -225,6 +225,7 @@ multipart fields.
 | `redact-pdf` | Redact PDF | `findText`, `redactEmails`, `redactPhones`, `redactCards`, `regions`, `dpi` |
 | `remove-pages` | Remove pages | `pages`\* |
 | `rotate-pdf` | Rotate PDF | `angle`, `pages` |
+| `scan-pdf` | Scan to PDF | `mode`, `enhance`, `trim`, `filename` |
 | `sign-pdf` | Sign PDF | `kind`, `signatureFile`, `text`, `face`, `colour`, `caption`, `pages`, `width`, `x`, `y` |
 | `split-pdf` | Split PDF | `mode`, `pages`, `ranges`, `every`, `maxMb`, `mergeAll` |
 | `summarise-pdf` | Summarise PDF *(needs a language model)* | `length`, `language`, `focus` |
