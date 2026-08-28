@@ -7,6 +7,7 @@ import { editor } from './editor.js'
 import { htmlShot } from './htmlshot.js'
 import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
+import { removePages } from './pdf-remove-pages.js'
 import { rotatePdf } from './pdf-rotate.js'
 import { officeToPdf } from './office-to-pdf.js'
 import { pdfCompress } from './pdf-compress.js'
@@ -57,6 +58,7 @@ export const ALL_TOOLS = [
   splitPdf,
   organizePdf,
   rotatePdf,
+  removePages,
   pdfToImage,
   imagesToPdf,
   pdfPageNumbers,
@@ -94,6 +96,7 @@ export {
   pdfToImage,
   pdfWatermark,
   organizePdf,
+  removePages,
   rotatePdf,
   splitPdf,
   blurFaces,

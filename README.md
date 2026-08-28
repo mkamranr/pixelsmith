@@ -102,6 +102,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **Merge** | Several documents into one, in the order you choose |
 | **Split** | Every page separately, or the ranges you name |
 | **Organise** | Reorder, duplicate or drop pages by clicking them |
+| **Remove pages** | Take pages out — click the ones to go |
 | **Rotate** | Quarter turns, per page or throughout |
 | **Crop** | Trim the margins off every page |
 | **Compress** | Smaller documents by rebuilding what is oversized |

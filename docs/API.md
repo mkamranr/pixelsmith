@@ -197,9 +197,9 @@ multipart fields.
 | `resize` | Resize images | `mode`, `width`, `height`, `percent`, `maintainAspect`, `noEnlarge` |
 | `rotate` | Rotate & flip | `angle`, `flop`, `flip`, `background` |
 | `upscale` | Upscale image | `scale` |
-| `watermark` | Watermark images | `mark`, `text`, `markFile`, `markScale`, `position`, `tiled`, `color`, `opacity`, `fontSize` |
+| `watermark` | Watermark images | `mark`, `text`, `markFile`, `markScale`, `x`, `y`, `position`, `tiled`, `color`, `opacity`, `fontSize` |
 
-### PDF tools (23)
+### PDF tools (24)
 
 | `tool` | Name | Parameters |
 |---|---|---|
@@ -222,13 +222,15 @@ multipart fields.
 | `pdf-unlock` | Unlock PDF | `password`\* |
 | `pdf-watermark` | Watermark PDF | `text`\*, `tiled`, `opacity`, `color`, `fontSize`, `pages`, `x`, `y` |
 | `redact-pdf` | Redact PDF | `findText`, `redactEmails`, `redactPhones`, `redactCards`, `regions`, `dpi` |
+| `remove-pages` | Remove pages | `pages`\* |
 | `rotate-pdf` | Rotate PDF | `angle`, `pages` |
-| `sign-pdf` | Sign PDF | `kind`, `signatureFile`, `text`, `caption`, `pages`, `width`, `x`, `y` |
+| `sign-pdf` | Sign PDF | `kind`, `signatureFile`, `text`, `face`, `colour`, `caption`, `pages`, `width`, `x`, `y` |
 | `split-pdf` | Split PDF | `mode`, `pages`, `ranges`, `every`, `maxMb`, `mergeAll` |
 | `summarise-pdf` | Summarise PDF *(needs a language model)* | `length`, `language`, `focus` |
 
 \* required — the request is refused without it. `GET /api/tools/{id}` gives each
 parameter's kind, default and permitted values.
+
 
 ## Worked example
 
