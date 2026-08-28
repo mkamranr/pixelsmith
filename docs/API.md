@@ -199,7 +199,7 @@ multipart fields.
 | `upscale` | Upscale image | `scale` |
 | `watermark` | Watermark images | `mark`, `text`, `markFile`, `markScale`, `x`, `y`, `position`, `tiled`, `color`, `opacity`, `fontSize` |
 
-### PDF tools (24)
+### PDF tools (25)
 
 | `tool` | Name | Parameters |
 |---|---|---|
@@ -217,6 +217,7 @@ multipart fields.
 | `pdf-repair` | Repair PDF | — |
 | `pdf-to-excel` | PDF to Excel | — |
 | `pdf-to-image` | PDF to JPG | `format`, `dpi`, `quality`, `pages` |
+| `pdf-to-markdown` | PDF to Markdown | `pageBreaks` |
 | `pdf-to-powerpoint` | PDF to PowerPoint | — |
 | `pdf-to-word` | PDF to Word | — |
 | `pdf-unlock` | Unlock PDF | `password`\* |

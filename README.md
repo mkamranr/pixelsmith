@@ -112,6 +112,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **PDF to Word** | Editable text, in text boxes rather than flowing paragraphs |
 | **PDF to Excel** | The text as rows, with columns recovered from the gaps |
 | **PDF to PowerPoint** | Each page as an editable slide |
+| **PDF to Markdown** | The words as Markdown, with headings taken from the type sizes |
 | **HTML to PDF** | Pasted markup or an allowlisted internal page |
 | **OCR** | Makes a scan searchable — English, Arabic, or both |
 | **Page numbers** | Numbered where you want them, in the format you want |
