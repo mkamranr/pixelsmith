@@ -119,6 +119,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **Page numbers** | Numbered where you want them, in the format you want |
 | **Watermark** | Text across one page or tiled over all of them |
 | **Sign** | Draw a signature, set your name in one of three hands, or place a scanned one |
+| **Fill a form** | The document's own boxes, offered as fields — then locked in |
 | **Redact** | Blacks out text and removes it from the file, not just covers it |
 | **Compare** | Two versions, with a report of what changed on which page |
 | **Protect** | AES-256 encryption, with printing and copying controlled |

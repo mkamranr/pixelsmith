@@ -1644,6 +1644,12 @@ input.is-driven { display: none; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
+/* ---- Filling a form's own boxes ---------------------------------------- */
+.form-fill { margin-bottom: 18px; }
+.form-fields { display: flex; flex-direction: column; gap: 10px; }
+/* Long field names come from the document and are not ours to shorten. */
+.form-fields label { word-break: break-word; }
+
 /* ---- The signature builder --------------------------------------------- */
 /* The faces the workers draw with, served from this host. No external request
    is made for them, and the preview therefore matches the result. */

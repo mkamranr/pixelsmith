@@ -57,10 +57,11 @@ export interface ToolUi {
   /**
    * An extra piece of interface the tool needs beyond its field list. The
    * signature builder is a pad to sign on and a preview of the typed name in
-   * each hand — neither of which is a form field, and both of which are the
-   * difference between a tool you can use and one you can only fill in.
+   * each hand; the form builder is a set of inputs read out of the uploaded
+   * document itself. Neither is a declared field, and both are the difference
+   * between a tool you can use and one you can only fill in.
    */
-  builder?: 'signature'
+  builder?: 'signature' | 'form'
   /**
    * How the results page should present what came back, when a grid of files is
    * the wrong answer. `compare` lays the two documents side by side with the

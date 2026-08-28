@@ -199,11 +199,12 @@ multipart fields.
 | `upscale` | Upscale image | `scale` |
 | `watermark` | Watermark images | `mark`, `text`, `markFile`, `markScale`, `x`, `y`, `position`, `tiled`, `color`, `opacity`, `fontSize` |
 
-### PDF tools (27)
+### PDF tools (28)
 
 | `tool` | Name | Parameters |
 |---|---|---|
 | `compare-pdf` | Compare PDF | `title` |
+| `fill-form` | Fill a PDF form | `values`\*, `flatten` |
 | `html-to-pdf` | HTML to PDF | `source`, `html`, `url`, `pageSize`, `landscape`, `margin`, `printBackground`, `blockThirdParty`, `filename` |
 | `images-to-pdf` | JPG to PDF | `pageSize`, `orientation`, `margin`, `filename` |
 | `merge-pdf` | Merge PDF | `filename`, `rotations` |

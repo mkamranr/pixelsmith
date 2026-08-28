@@ -140,7 +140,21 @@
     {% block panelExtras %}{% endblock %}
 
     {% if tool.ui.fields | length %}
-      <div class="panel-fields">
+      {% if tool.ui.builder == 'form' %}
+    {# The boxes belong to the document: they are read out of the uploaded file
+       and offered here. The hidden field below is what gets posted. #}
+    <div class="form-fill" data-form-fill hidden
+         data-pdfjs="{{ asset('/static/vendor/pdfjs/pdf.min.mjs') }}"
+         data-pdfjs-worker="{{ asset('/static/vendor/pdfjs/pdf.worker.min.mjs') }}"
+         data-pdfjs-fonts="/static/vendor/pdfjs/standard_fonts/"
+         data-pdfjs-cmaps="/static/vendor/pdfjs/cmaps/">
+      <p class="panel-label">The form's own boxes</p>
+      <div class="form-fields" data-form-fields></div>
+      <p class="hint" data-form-status></p>
+    </div>
+    {% endif %}
+
+    <div class="panel-fields">
         {% for f in tool.ui.fields %}{{ m.field(f) }}{% endfor %}
       </div>
     {% endif %}
@@ -168,6 +182,7 @@
 {% else %}
 <script src="{{ asset('/static/canvas.js') }}" defer></script>
 {% if tool.imageBoxes %}<script src="{{ asset('/static/boxes.js') }}" defer></script>{% endif %}
+{% if tool.ui.builder == 'form' %}<script src="{{ asset('/static/formfill.js') }}" type="module"></script>{% endif %}
 {% if tool.family == 'pdf' %}<script src="{{ asset('/static/pdfpages.js') }}" defer></script>{% endif %}
 {% if tool.hasRangeField %}<script src="{{ asset('/static/pdfranges.js') }}" defer></script>{% endif %}
 {% endif %}
