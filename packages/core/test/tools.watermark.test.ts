@@ -80,6 +80,77 @@ describe('watermark tool', () => {
     expect(await inkIn(topLeft)).toBeGreaterThan(await inkIn(bottomRight))
   })
 
+  /**
+   * Nine positions is nine answers to a question with infinitely many. The PDF
+   * watermark has been draggable for a while; this is the image one catching up,
+   * and the coordinates are what dragging writes.
+   */
+  const inkIn = async (buffer: Buffer) =>
+    (await sharp(buffer).stats()).channels.reduce((total, c) => total + c.stdev, 0)
+
+  const quadrants = async (path: string) => {
+    const image = sharp(path)
+    const { width = 400, height = 300 } = await image.metadata()
+    const half = { width: Math.floor(width / 2), height: Math.floor(height / 2) }
+    const at = async (left: number, top: number) =>
+      inkIn(await sharp(path).extract({ left, top, ...half }).toBuffer())
+    return {
+      topLeft: await at(0, 0),
+      topRight: await at(half.width, 0),
+      bottomLeft: await at(0, half.height),
+      bottomRight: await at(half.width, half.height),
+    }
+  }
+
+  it('puts the mark at the coordinates it is given', async () => {
+    const src = await whiteCanvas('at-xy.png')
+    const [out] = await runTool(watermark, {
+      inputs: [src],
+      outDir: join(outDir, 'xy'),
+      // Upper left quarter, nowhere near the default bottom right.
+      params: { text: 'HERE', x: 0.22, y: 0.2 },
+    })
+
+    const ink = await quadrants(out!.path)
+
+    expect(ink.topLeft).toBeGreaterThan(ink.bottomRight)
+    expect(ink.topLeft).toBeGreaterThan(ink.topRight)
+  })
+
+  it('moves the mark when the coordinates move', async () => {
+    const src = await whiteCanvas('moved.png')
+    const one = await runTool(watermark, {
+      inputs: [src], outDir: join(outDir, 'xy-a'), params: { text: 'HERE', x: 0.2, y: 0.2 },
+    })
+    const two = await runTool(watermark, {
+      inputs: [src], outDir: join(outDir, 'xy-b'), params: { text: 'HERE', x: 0.8, y: 0.8 },
+    })
+
+    const first = await quadrants(one[0]!.path)
+    const second = await quadrants(two[0]!.path)
+
+    expect(first.topLeft).toBeGreaterThan(first.bottomRight)
+    expect(second.bottomRight).toBeGreaterThan(second.topLeft)
+  })
+
+  it('still honours the nine positions when given no coordinates', async () => {
+    // The presets remain: "bottom right" is a perfectly good way to say it, and
+    // an existing caller must not change behaviour.
+    const src = await whiteCanvas('preset.png')
+    const [out] = await runTool(watermark, {
+      inputs: [src], outDir: join(outDir, 'preset'), params: { text: 'HERE', position: 'top-right' },
+    })
+
+    const ink = await quadrants(out!.path)
+
+    expect(ink.topRight).toBeGreaterThan(ink.bottomLeft)
+  })
+
+  it('refuses coordinates outside the image', () => {
+    expect(watermark.params.safeParse({ text: 'x', x: 1.4 }).success).toBe(false)
+    expect(watermark.params.safeParse({ text: 'x', y: -0.2 }).success).toBe(false)
+  })
+
   it('rejects an empty watermark', () => {
     expect(watermark.params.safeParse({ text: '   ' }).success).toBe(false)
   })

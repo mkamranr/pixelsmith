@@ -317,26 +317,92 @@
     }
 
     var mark = el('div', 'ov mark-single', text)
+    mark.setAttribute('data-mark-drag', '')
     mark.style.color = colour
     mark.style.opacity = String(opacity)
     mark.style.fontSize = size + 'px'
     var pad = size * 0.75
-    var position = this.value('position') || 'bottom-right'
+    var atX = this.value('x')
+    var atY = this.value('y')
 
-    if (position === 'center') {
-      mark.style.left = offsetX + box.width / 2 + 'px'
-      mark.style.top = offsetY + box.height / 2 + 'px'
+    if (atX !== '' && atX !== null && atX !== undefined) {
+      // Dragged: a fraction of the image, which is what the tool now takes.
+      mark.style.left = offsetX + Number(atX) * box.width + 'px'
+      mark.style.top = offsetY + Number(atY || 0.5) * box.height + 'px'
       mark.style.transform = 'translate(-50%, -50%)'
     } else {
-      if (position.indexOf('top') === 0) mark.style.top = offsetY + pad + 'px'
-      else mark.style.top = offsetY + box.height - pad - size + 'px'
-      if (position.indexOf('left') > -1) mark.style.left = offsetX + pad + 'px'
-      else {
-        mark.style.left = offsetX + box.width - pad + 'px'
-        mark.style.transform = 'translateX(-100%)'
+      var position = this.value('position') || 'bottom-right'
+      if (position === 'center') {
+        mark.style.left = offsetX + box.width / 2 + 'px'
+        mark.style.top = offsetY + box.height / 2 + 'px'
+        mark.style.transform = 'translate(-50%, -50%)'
+      } else {
+        if (position.indexOf('top') === 0) mark.style.top = offsetY + pad + 'px'
+        else mark.style.top = offsetY + box.height - pad - size + 'px'
+        if (position.indexOf('left') > -1) mark.style.left = offsetX + pad + 'px'
+        else {
+          mark.style.left = offsetX + box.width - pad + 'px'
+          mark.style.transform = 'translateX(-100%)'
+        }
       }
     }
+
+    this.dragMark(mark, box, offsetX, offsetY)
     this.plate.appendChild(mark)
+  }
+
+  /**
+   * Drag the mark to where it should sit.
+   *
+   * Nine positions is nine answers to a question with infinitely many, and the
+   * PDF watermark has been draggable for a while — this is the image one
+   * catching up. The fields still hold the value and still work on their own;
+   * dragging fills them in.
+   */
+  Canvas.prototype.dragMark = function (mark, box, offsetX, offsetY) {
+    var self = this
+    var fieldX = this.form.querySelector('[name="x"]')
+    var fieldY = this.form.querySelector('[name="y"]')
+    if (!fieldX || !fieldY) return
+
+    mark.classList.add('is-draggable')
+    mark.setAttribute('title', 'Drag to move')
+
+    mark.addEventListener('pointerdown', function (event) {
+      event.preventDefault()
+      try {
+        mark.setPointerCapture(event.pointerId)
+      } catch {
+        // Without capture the drag stops at the edge, which is survivable.
+      }
+
+      var move = function (moved) {
+        var withinX = (moved.clientX - box.left) / box.width
+        var withinY = (moved.clientY - box.top) / box.height
+        var clamp = function (value) {
+          return Math.min(1, Math.max(0, value))
+        }
+        fieldX.value = clamp(withinX).toFixed(4)
+        fieldY.value = clamp(withinY).toFixed(4)
+        mark.style.left = offsetX + clamp(withinX) * box.width + 'px'
+        mark.style.top = offsetY + clamp(withinY) * box.height + 'px'
+        mark.style.transform = 'translate(-50%, -50%)'
+      }
+
+      var up = function () {
+        mark.removeEventListener('pointermove', move)
+        mark.removeEventListener('pointerup', up)
+        mark.removeEventListener('pointercancel', up)
+        // Announce it once at the end: the preview follows the pointer already,
+        // and every intermediate value is noise to anything else listening.
+        fieldX.dispatchEvent(new Event('change', { bubbles: true }))
+        self.draw()
+      }
+
+      mark.addEventListener('pointermove', move)
+      mark.addEventListener('pointerup', up)
+      mark.addEventListener('pointercancel', up)
+    })
   }
 
   Canvas.prototype.drawCrop = function (entry) {

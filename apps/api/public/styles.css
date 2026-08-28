@@ -1532,6 +1532,10 @@ input.is-driven { display: none; }
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
 
+/* A watermark you can move: the mark itself is the handle. */
+.mark-single.is-draggable { cursor: move; touch-action: none; }
+.mark-single.is-draggable:hover { outline: 1px dashed currentColor; outline-offset: 4px; }
+
 /* ---- Choosing where a PDF is cut --------------------------------------- */
 /* The tile is the positioning context; the handle straddles its left edge, so
    it reads as "between these two pages" rather than as part of either. */

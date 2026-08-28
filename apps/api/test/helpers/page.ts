@@ -26,11 +26,20 @@ export function pageWith(script: string, html: string) {
     url: 'http://localhost/',
   })
 
-  // Some scripts reach for these; jsdom has no layout engine, so they are
-  // stubbed rather than left to throw.
+  /**
+   * jsdom has no layout engine and no object URLs, and the scripts reach for
+   * both. Stubbed rather than left to throw, because what is under test is the
+   * arithmetic, not the browser.
+   */
   const window = dom.window as unknown as Record<string, unknown>
   if (!window.requestAnimationFrame) {
     window.requestAnimationFrame = ((fn: () => void) => setTimeout(fn, 0)) as never
+  }
+  const url = dom.window.URL as unknown as Record<string, unknown>
+  if (!url.createObjectURL) {
+    let issued = 0
+    url.createObjectURL = (() => `blob:stub/${(issued += 1)}`) as never
+    url.revokeObjectURL = (() => undefined) as never
   }
 
   dom.window.eval(readFileSync(`${PUBLIC}${script}`, 'utf8'))
@@ -54,4 +63,28 @@ export function pageGrid(count: number): string {
   }).join('')
 
   return `<ol class="pdf-page-grid" data-pdf-grid>${tiles}</ol>`
+}
+
+/**
+ * Stage a file the way choosing one does, so the scripts that only act once
+ * there is something to act on will run.
+ *
+ * The bytes are irrelevant: nothing here decodes an image, and the size a
+ * picture is drawn at is stated by the test rather than measured.
+ */
+export function stageFile(dom: JSDOM, name = 'sample.png', type = 'image/png') {
+  const input = dom.window.document.querySelector('[data-file-input]') as HTMLInputElement | null
+  if (!input) throw new Error('no file input on this page')
+
+  const file = new dom.window.File([new Uint8Array([1, 2, 3])], name, { type })
+
+  // jsdom has no DataTransfer, so the list is defined on the input directly.
+  // The scripts read `files` and iterate it; the ones that write it back guard
+  // for DataTransfer being absent already, because a browser without it is a
+  // browser where staging cannot be improved on.
+  const list = { 0: file, length: 1, item: (index: number) => (index === 0 ? file : null) }
+  Object.defineProperty(input, 'files', { value: list, configurable: true })
+
+  input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  return file
 }

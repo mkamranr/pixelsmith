@@ -18,6 +18,14 @@ export const WatermarkParams = z
     /** Logo width as a percentage of the base image width. */
     markScale: z.coerce.number().int().min(2).max(100).default(25),
   position: z.enum(POSITIONS).default('bottom-right'),
+  /**
+   * Where the mark sits, as a fraction of the image. Nine positions is nine
+   * answers to a question with infinitely many, so dragging the mark writes
+   * these; `position` remains for anyone who would rather just say "bottom
+   * right", and is what applies when these are absent.
+   */
+  x: z.coerce.number().min(0).max(1).optional(),
+  y: z.coerce.number().min(0).max(1).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default('#ffffff'),
   opacity: z.number().int().min(1).max(100).default(45),
   /** Omitted means scale with the image, so one setting suits any size. */
@@ -41,8 +49,28 @@ interface Placement {
   anchor: 'start' | 'middle' | 'end'
 }
 
-function placement(position: (typeof POSITIONS)[number], w: number, h: number, pad: number, size: number): Placement {
-  switch (position) {
+function placement(
+  params: Pick<WatermarkParams, 'position' | 'x' | 'y'>,
+  w: number,
+  h: number,
+  pad: number,
+  size: number,
+): Placement {
+  // Coordinates win where they are given: they are what dragging produces, and
+  // they can say things the nine presets cannot.
+  if (params.x !== undefined || params.y !== undefined) {
+    const x = (params.x ?? 0.5) * w
+    const y = (params.y ?? 0.5) * h
+    return {
+      // Kept inside the image, so a mark dragged to the very edge is not
+      // half-clipped by its own baseline.
+      x: Math.min(w - pad, Math.max(pad, x)),
+      y: Math.min(h - pad, Math.max(pad + size, y + size)),
+      anchor: 'middle',
+    }
+  }
+
+  switch (params.position) {
     case 'top-left':
       return { x: pad, y: pad + size, anchor: 'start' }
     case 'top-right':
@@ -81,7 +109,7 @@ function buildOverlay(params: WatermarkParams, width: number, height: number): B
     body = cells.join('')
   } else {
     const pad = Math.round(size * 0.75)
-    const at = placement(params.position, width, height, pad, size)
+    const at = placement(params, width, height, pad, size)
     const rotate = params.rotation !== 0 ? ` transform="rotate(${params.rotation} ${at.x} ${at.y})"` : ''
     body = `<text x="${at.x.toFixed(0)}" y="${at.y.toFixed(0)}" text-anchor="${at.anchor}" ${common}${rotate}>${safe}</text>`
   }
@@ -197,6 +225,15 @@ export const watermark: Tool<WatermarkParams> = {
         default: 25,
         showWhen: { field: 'mark', equals: ['image'] },
       },
+      {
+        // Written by dragging the mark on the picture. Declared because a value
+        // that exists only in the schema is dropped at intake, however correct
+        // the schema is.
+        name: 'x',
+        label: 'From the left',
+        kind: 'hidden',
+      },
+      { name: 'y', label: 'From the top', kind: 'hidden' },
       {
         name: 'position',
         label: 'Position',
