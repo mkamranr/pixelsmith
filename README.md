@@ -124,6 +124,7 @@ Two menus, because they are two jobs: **Images** and **PDF**.
 | **Unlock** | Removes a password you know |
 | **Repair** | Rebuilds a damaged document as far as it can be read |
 | **Summarise** | Reads a document and writes a summary — needs a language model |
+| **Translate** | The words of a document in another language — needs a language model |
 
 Every tool takes batches, streams results as a zip, and can pass its output
 straight into another tool without re-uploading. PDF tools show the pages as

@@ -199,7 +199,7 @@ multipart fields.
 | `upscale` | Upscale image | `scale` |
 | `watermark` | Watermark images | `mark`, `text`, `markFile`, `markScale`, `x`, `y`, `position`, `tiled`, `color`, `opacity`, `fontSize` |
 
-### PDF tools (25)
+### PDF tools (26)
 
 | `tool` | Name | Parameters |
 |---|---|---|
@@ -228,6 +228,7 @@ multipart fields.
 | `sign-pdf` | Sign PDF | `kind`, `signatureFile`, `text`, `face`, `colour`, `caption`, `pages`, `width`, `x`, `y` |
 | `split-pdf` | Split PDF | `mode`, `pages`, `ranges`, `every`, `maxMb`, `mergeAll` |
 | `summarise-pdf` | Summarise PDF *(needs a language model)* | `length`, `language`, `focus` |
+| `translate-pdf` | Translate PDF *(needs a language model)* | `language`\*, `keepOriginal` |
 
 \* required — the request is refused without it. `GET /api/tools/{id}` gives each
 parameter's kind, default and permitted values.

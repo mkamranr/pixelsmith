@@ -8,6 +8,7 @@ import { htmlShot } from './htmlshot.js'
 import { mergePdf } from './pdf-merge.js'
 import { organizePdf } from './pdf-organize.js'
 import { pdfToMarkdown } from './pdf-to-markdown.js'
+import { translatePdf } from './pdf-translate.js'
 import { removePages } from './pdf-remove-pages.js'
 import { rotatePdf } from './pdf-rotate.js'
 import { officeToPdf } from './office-to-pdf.js'
@@ -80,6 +81,7 @@ export const ALL_TOOLS = [
   signPdf,
   comparePdf,
   summarisePdf,
+  translatePdf,
 ]
 
 export const registry = createRegistry(ALL_TOOLS)
@@ -102,6 +104,7 @@ export {
   removePages,
   rotatePdf,
   splitPdf,
+  translatePdf,
   blurFaces,
   editor,
   compress,

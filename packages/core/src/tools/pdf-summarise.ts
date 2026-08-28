@@ -1,14 +1,12 @@
 import { stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { PDFDocument } from 'pdf-lib'
 import { z } from 'zod'
 import { BadInputError, LlmUnavailableError } from '../errors.js'
 import { chatWithLlm, readLlmSettings, type LlmSettings } from '../llm.js'
 import { PDF_MIME } from '../pdf.js'
-import { preparePdfText } from '../pdf-draw-text.js'
+import { writeTextDocument } from '../pdf-document.js'
 import { extractPdfText } from '../pdf-text.js'
 import { deriveName, uniqueName } from '../naming.js'
-import { stripControlChars, wrapText } from '../text.js'
 import type { Tool } from '../registry.js'
 
 /**
@@ -32,10 +30,6 @@ const LENGTHS = {
   detailed: 'roughly a page, with the main points as a list',
 } as const
 
-const PAGE_WIDTH = 595
-const PAGE_HEIGHT = 842
-const MARGIN = 56
-const BODY_SIZE = 11
 
 export const SummarisePdfParams = z.object({
   length: z.enum(['brief', 'standard', 'detailed']).default('standard'),
@@ -163,7 +157,17 @@ export const summarisePdf: Tool<SummarisePdfParams> = {
 
       const name = uniqueName(taken, deriveName(input.name, { ext: 'pdf', suffix: '-summary' }))
       const dest = join(outDir, name)
-      await writeFile(dest, await report(input.name, summary, parts.length))
+      await writeFile(
+        dest,
+        await writeTextDocument({
+          title: 'Summary',
+          notes: [
+            input.name,
+            ...(parts.length > 1 ? [`Summarised in ${parts.length} parts, then combined.`] : []),
+          ],
+          body: summary,
+        }),
+      )
 
       outputs.push({
         path: dest,
@@ -195,54 +199,3 @@ export const summarisePdf: Tool<SummarisePdfParams> = {
   },
 }
 
-/**
- * Lay the summary out as a document of its own.
- *
- * Through preparePdfText, so a summary asked for in Arabic is shaped properly
- * rather than throwing on the first character.
- */
-async function report(source: string, summary: string, parts: number): Promise<Uint8Array> {
-  const doc = await PDFDocument.create()
-  let page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-  let cursor = PAGE_HEIGHT - MARGIN
-
-  const line = async (text: string, size = BODY_SIZE, bold = false, grey = false) => {
-    const height = size * 1.45
-    if (cursor - height < MARGIN) {
-      page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
-      cursor = PAGE_HEIGHT - MARGIN
-    }
-    cursor -= height
-    if (text === '') return
-
-    const mark = await preparePdfText(doc, {
-      text,
-      size,
-      bold,
-      ...(grey ? { colour: { r: 0.35, g: 0.35, b: 0.35 } } : {}),
-    })
-    mark.draw(page, { x: MARGIN, y: cursor })
-  }
-
-  await line('Summary', 20, true)
-  await line('')
-  await line(source, 9, false, true)
-  if (parts > 1) {
-    await line(`Summarised in ${parts} parts, then combined.`, 9, false, true)
-  }
-  await line('')
-
-  const width = PAGE_WIDTH - MARGIN * 2
-  for (const paragraph of stripControlChars(summary).split(/\n+/)) {
-    if (paragraph.trim() === '') {
-      await line('')
-      continue
-    }
-    for (const wrapped of wrapText(paragraph.trim(), width, BODY_SIZE)) {
-      await line(wrapped, BODY_SIZE)
-    }
-    await line('')
-  }
-
-  return doc.save()
-}
