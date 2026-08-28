@@ -1532,6 +1532,38 @@ input.is-driven { display: none; }
 .canvas-view.is-document .canvas-plate { display: none; }
 .canvas-view.is-document .canvas-caption { justify-content: center; }
 
+/* ---- Choosing where a PDF is cut --------------------------------------- */
+/* The tile is the positioning context; the handle straddles its left edge, so
+   it reads as "between these two pages" rather than as part of either. */
+.pdf-page { position: relative; }
+
+.pdf-cut {
+  position: absolute;
+  left: -11px; top: 6px; bottom: 22px;
+  width: 22px;
+  display: grid; place-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.pdf-cut-line {
+  width: 3px; height: 100%;
+  background: var(--line-strong, #cfd3da);
+  border-radius: 2px;
+  transition: background 0.12s, width 0.12s;
+}
+.pdf-cut:hover .pdf-cut-line { background: var(--accent, #c4551f); width: 4px; }
+.pdf-cut.is-cut .pdf-cut-line {
+  background: var(--accent, #c4551f);
+  width: 4px;
+  /* Dashed, like a cutting line. */
+  background-image: linear-gradient(to bottom, transparent 0 4px, rgba(255, 255, 255, 0.85) 4px 8px);
+  background-size: 100% 8px;
+}
+.pdf-cut:focus-visible { outline: 2px solid var(--accent, #c4551f); outline-offset: 1px; }
+
 /* ---- Two documents side by side ---------------------------------------- */
 /* Three columns: the two documents and the list of changes. Each document
    scrolls in its own column so the page itself does not grow to the length of

@@ -1,8 +1,13 @@
-// From/to rows for splitting a PDF into parts.
+// Choosing where a PDF is cut.
 //
 // The tool takes ranges as text — `1-6,10-12` — which is precise but asks the
-// user to hold the syntax in their head. These rows write that same value, and
-// mark the page grid so it is clear which part each page lands in.
+// user to hold the syntax in their head, and to know the page numbers before
+// they can say anything. So there are three ways to the same value: a handle
+// between the pages themselves, from/to rows for exact numbers, and the field.
+//
+// The handles are the honest answer to "where does this split?": cutting
+// between two pages is the gesture, and the parts are numbered on the grid as
+// soon as a cut lands.
 //
 // Enhancement only: the text field is what gets posted and stays perfectly
 // usable on its own. The rows move inside its wrapper so they appear and
@@ -40,6 +45,7 @@
       .map(function (row) { return row.from === row.to ? String(row.from) : row.from + '-' + row.to })
       .join(',')
     mark()
+    handles()
   }
 
   /**
@@ -68,6 +74,98 @@
       } else if (active) {
         badge.hidden = true
       }
+    })
+  }
+
+
+  /**
+   * Where the document is cut, derived from the parts themselves so there is
+   * one source of truth rather than a second list to keep in step.
+   *
+   * A cut before page N means N begins a new part. Page 1 always begins the
+   * first part and is not a cut.
+   */
+  function boundaries() {
+    return rows
+      .map(function (row) { return row.from })
+      .filter(function (from) { return from > 1 })
+      .sort(function (a, b) { return a - b })
+  }
+
+  /** Contiguous parts from a set of cuts, covering the whole document. */
+  function partsFrom(cuts, count) {
+    var starts = [1]
+    cuts.forEach(function (cut) {
+      if (cut > 1 && cut <= count && starts.indexOf(cut) === -1) starts.push(cut)
+    })
+    starts.sort(function (a, b) { return a - b })
+
+    return starts.map(function (start, index) {
+      var next = starts[index + 1]
+      return { from: start, to: next ? next - 1 : count }
+    })
+  }
+
+  function cutAt(pageNumber) {
+    if (!pageCount) return
+    var cuts = boundaries()
+    var at = cuts.indexOf(pageNumber)
+    if (at === -1) cuts.push(pageNumber)
+    else cuts.splice(at, 1)
+
+    edited = true
+    rows = partsFrom(cuts, pageCount)
+    render()
+    write()
+  }
+
+  /**
+   * A handle between each pair of pages. Its own control rather than a click on
+   * the page: the page button already means "choose this page" for the tools
+   * that select pages, and one gesture meaning two things depending on the mode
+   * is how a grid stops being legible.
+   */
+  function handles() {
+    var tiles = form.querySelectorAll('[data-pdf-grid] [data-page]')
+    if (!tiles.length) return
+    var active = !wrapper || !wrapper.hidden
+    var cuts = boundaries()
+
+    Array.prototype.forEach.call(tiles, function (button) {
+      var pageNumber = Number(button.getAttribute('data-page'))
+      var item = button.parentNode
+      if (!item) return
+
+      var handle = item.querySelector('[data-cut]')
+      // Nothing to cut before the first page: it always starts part one.
+      if (pageNumber < 2 || !active) {
+        if (handle) handle.remove()
+        return
+      }
+
+      if (!handle) {
+        handle = document.createElement('button')
+        handle.type = 'button'
+        handle.className = 'pdf-cut'
+        handle.setAttribute('data-cut', String(pageNumber))
+        handle.innerHTML = ''
+        var line = document.createElement('span')
+        line.className = 'pdf-cut-line'
+        handle.appendChild(line)
+        handle.addEventListener('click', function (event) {
+          event.preventDefault()
+          cutAt(pageNumber)
+        })
+        item.appendChild(handle)
+      }
+
+      var isCut = cuts.indexOf(pageNumber) !== -1
+      handle.classList.toggle('is-cut', isCut)
+      handle.setAttribute('aria-pressed', String(isCut))
+      handle.setAttribute(
+        'aria-label',
+        (isCut ? 'Do not split' : 'Split') + ' before page ' + pageNumber,
+      )
     })
   }
 
@@ -182,10 +280,15 @@
       render()
     }
     write()
+    handles()
   })
 
-  // The split mode changes which fields are on show; the marking follows.
-  form.addEventListener('change', mark)
+  // The split mode changes which fields are on show; the marking and the
+  // handles follow.
+  form.addEventListener('change', function () {
+    mark()
+    handles()
+  })
 
   render()
   write()
