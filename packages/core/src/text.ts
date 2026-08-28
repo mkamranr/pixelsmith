@@ -42,6 +42,35 @@ export const FONT_STACK = "'DejaVu Sans', 'Liberation Sans', Helvetica, Arial, s
  * close enough, and erring toward narrow lines is safe — a caption that wraps a
  * word early still reads correctly, one that overflows the canvas does not.
  */
+/**
+ * Letters that are written right to left: Hebrew, Arabic and its neighbours,
+ * plus the presentation forms a badly-made PDF sometimes carries.
+ */
+const RTL_LETTERS =
+  /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g
+
+/** Letters written left to right, for comparison. Latin, Greek, Cyrillic. */
+const LTR_LETTERS = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/g
+
+/**
+ * Which way a line runs.
+ *
+ * Decided by which script most of the letters are in rather than by the first
+ * one found: a figure or a product name inside an Arabic sentence does not make
+ * the sentence English, and one Arabic word in an English sentence does not
+ * flip it.
+ *
+ * This matters more than it looks. The base direction of a line decides where
+ * neutral characters — a full stop, a comma, a bracket — end up, so getting it
+ * wrong puts the full stop at the wrong end of every Arabic sentence.
+ */
+export function isRightToLeft(text: string): boolean {
+  const rtl = (text.match(RTL_LETTERS) ?? []).length
+  if (rtl === 0) return false
+  const ltr = (text.match(LTR_LETTERS) ?? []).length
+  return rtl > ltr
+}
+
 export function wrapText(text: string, maxWidthPx: number, fontSize: number): string[] {
   const perChar = fontSize * 0.58
   const maxChars = Math.max(8, Math.floor(maxWidthPx / perChar))

@@ -123,6 +123,18 @@ export async function preparePdfText(doc: PDFDocument, spec: PdfTextSpec): Promi
    * Everything else goes through librsvg, which shapes and orders complex
    * scripts properly. That is the whole reason this function exists.
    */
+  /**
+   * No base direction is set here, and that is deliberate.
+   *
+   * I added `direction="rtl"` for right-to-left text on the assumption it was
+   * needed, then measured: librsvg resolves the direction from the text itself,
+   * and the render is pixel-identical with the attribute, without it, and
+   * against a line forced right-to-left by an embedded mark. It changed
+   * nothing, so it is not here.
+   *
+   * What was actually wrong was the alignment of the finished line, which is
+   * the caller's business — see pdf-document.ts.
+   */
   let png = wantsFace
     ? drawWithFace(spec.text, spec.family!, fontPx, canvasWidth, canvasHeight, baselinePx, fill)
     : await sharp(

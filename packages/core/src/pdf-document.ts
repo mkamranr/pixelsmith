@@ -1,7 +1,7 @@
 import { PDFDocument } from 'pdf-lib'
 
 import { preparePdfText } from './pdf-draw-text.js'
-import { stripControlChars, wrapText } from './text.js'
+import { isRightToLeft, stripControlChars, wrapText } from './text.js'
 
 const PAGE_WIDTH = 595
 const PAGE_HEIGHT = 842
@@ -46,7 +46,16 @@ export async function writeTextDocument(spec: TextDocument): Promise<Uint8Array>
       bold,
       ...(grey ? { colour: { r: 0.35, g: 0.35, b: 0.35 } } : {}),
     })
-    mark.draw(page, { x: MARGIN, y: cursor })
+
+    /**
+     * Each line is set against the margin its own language starts from. A
+     * translated document often carries both — the source beside the
+     * translation — so this is decided per line rather than for the document.
+     */
+    const x = isRightToLeft(text)
+      ? Math.max(MARGIN, PAGE_WIDTH - MARGIN - mark.width)
+      : MARGIN
+    mark.draw(page, { x, y: cursor })
   }
 
   await line(spec.title, TITLE_SIZE, true)
